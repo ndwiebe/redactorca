@@ -5,19 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Redactor CA — strip client identity before AI, on your own machine</title>
   <meta name="description" content="Local-first PII redaction for Canadian accounting. Your client data never leaves your computer." />
-  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322c55e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.5 4 5.5v6c0 4.5 3.2 8 8 10 4.8-2 8-5.5 8-10v-6L12 2.5Z'/%3E%3Cpath d='M9 12.2l2.2 2.2L15.5 10'/%3E%3C/svg%3E" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">▦</span>
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2.5 4 5.5v6c0 4.5 3.2 8 8 10 4.8-2 8-5.5 8-10v-6L12 2.5Z"/>
+          <path d="M9 12.2l2.2 2.2L15.5 10"/>
+        </svg>
+      </span>
       <div>
         <h1>Redactor<span class="ca">CA</span></h1>
         <p class="tag">Strip client identity before you paste into AI</p>
       </div>
     </div>
-    <div id="trust" class="trust" title="This tool makes zero network calls while you work. Open your browser's Network tab and watch.">
-      🔒 <span id="trust-text">100% on your device · 0 uploads</span>
+    <div id="trust" class="trust" title="This tool makes zero network calls while you work. Open your browser's Network tab and watch — it stays empty.">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+      </svg>
+      <span id="trust-text">100% on your device · 0 uploads</span>
     </div>
   </header>
 
@@ -46,6 +54,10 @@
 
 Nothing is uploaded. Redaction runs in this browser tab."></textarea>
         </div>
+        <p class="reassure">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
+          Files are read inside your browser and never sent anywhere.
+        </p>
       </div>
 
       <div class="pane">

@@ -1,3 +1,10 @@
+// Self-hosted fonts (bundled into the build — no external/CDN request, so the
+// "0 network calls" promise stays literally true).
+import '@fontsource/ibm-plex-sans/400.css';
+import '@fontsource/ibm-plex-sans/500.css';
+import '@fontsource/ibm-plex-sans/600.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import './style.css';
 import { detectPatterns } from './patterns';
 const CATS = {
     SIN: { label: 'SIN', color: '#ff7b6b', presets: new Set(['all', 'payroll', 'corporate', 't1']) },

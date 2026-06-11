@@ -1,19 +1,26 @@
 :root {
-  --bg: #0e1116;
-  --panel: #161b22;
-  --panel-2: #1c232c;
-  --border: #2a323d;
-  --text: #e6edf3;
-  --muted: #8b97a6;
-  --accent: #2f9e6e;       /* trust green */
-  --accent-dim: #1d3a2d;
+  /* Slate fintech palette (per ui-ux-pro-max: trustworthy/banking dark mode) */
+  --bg: #0b1120;
+  --panel: #131c2e;
+  --panel-2: #1b273c;
+  --border: #2b3852;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #22c55e;       /* trust green (run-safe) */
+  --accent-dim: #14331f;
   --gold: #c9a227;
   --danger: #d4604f;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-ui);
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; font-family: var(--font-ui); }
+
+/* Accessibility: visible keyboard focus on every interactive element */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -21,15 +28,19 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
   flex-wrap: wrap;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
-.logo { font-size: 28px; color: var(--gold); }
-.topbar h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+.logo { color: var(--accent); display: inline-flex; }
+.topbar h1 { font-size: 20px; margin: 0; letter-spacing: .3px; font-weight: 600; }
 .topbar h1 .ca { color: var(--gold); }
 .tag { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
 .trust {
-  background: var(--accent-dim); color: #8ff0bf; border: 1px solid #2c5d44;
-  padding: 7px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--accent-dim); color: #86efac; border: 1px solid #2c5d44;
+  padding: 8px 13px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap;
 }
+.trust svg { flex-shrink: 0; }
 .trust.breach { background: #3a1d1d; color: #ffb4a8; border-color: #5d2c2c; }
+.reassure { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 14px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
+.reassure svg { color: var(--accent); flex-shrink: 0; }
 
 main { flex: 1; padding: 18px 20px; max-width: 1200px; width: 100%; margin: 0 auto; }
 
@@ -38,15 +49,18 @@ main { flex: 1; padding: 18px 20px; max-width: 1200px; width: 100%; margin: 0 au
 .presets .lbl { color: var(--muted); font-size: 13px; }
 .preset {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; min-height: 38px;
+  transition: border-color .18s, background .18s;
 }
 .preset.active { background: var(--accent); border-color: var(--accent); color: #06140d; font-weight: 600; }
 
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
 .toggle {
   display: inline-flex; align-items: center; gap: 6px; background: var(--panel-2);
-  border: 1px solid var(--border); padding: 5px 10px; border-radius: 20px; font-size: 12.5px; cursor: pointer; user-select: none;
+  border: 1px solid var(--border); padding: 7px 11px; border-radius: 20px; font-size: 12.5px; cursor: pointer; user-select: none;
+  transition: border-color .18s;
 }
+.toggle:hover { border-color: var(--accent); }
 .toggle input { accent-color: var(--accent); }
 .toggle .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 
@@ -65,11 +79,11 @@ main { flex: 1; padding: 18px 20px; max-width: 1200px; width: 100%; margin: 0 au
 .drop.dragover { outline: 2px dashed var(--accent); outline-offset: -6px; }
 #input {
   flex: 1; min-height: 340px; width: 100%; resize: vertical; border: 0; background: transparent;
-  color: var(--text); padding: 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; line-height: 1.5;
+  color: var(--text); padding: 14px; font-family: var(--font-mono); font-size: 14px; line-height: 1.55;
 }
 #input:focus { outline: none; }
 
-.output { min-height: 340px; padding: 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; overflow-y: auto; }
+.output { min-height: 340px; padding: 14px; font-family: var(--font-mono); font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; overflow-y: auto; }
 .output .empty { color: var(--muted); font-family: -apple-system, sans-serif; }
 mark.r { border-radius: 3px; padding: 0 2px; color: #0a0a0a; font-weight: 600; cursor: pointer; }
 mark.r.off { background: transparent !important; color: var(--text); font-weight: 400; text-decoration: line-through; opacity: .5; }
@@ -79,3 +93,12 @@ mark.r.off { background: transparent !important; color: var(--text); font-weight
 .chip b { color: var(--gold); }
 
 footer { display: flex; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+
+/* Mobile: 16px+ inputs prevent iOS zoom-on-focus; 44px touch targets */
+@media (max-width: 760px) {
+  #input, .output { font-size: 16px; }
+  .preset, .filebtn, .outbtns button { min-height: 44px; display: inline-flex; align-items: center; }
+  .toggle { min-height: 40px; }
+  .topbar { padding: 12px 16px; }
+  main { padding: 14px 16px; }
+}

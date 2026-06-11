@@ -1,3 +1,10 @@
+// Self-hosted fonts (bundled into the build — no external/CDN request, so the
+// "0 network calls" promise stays literally true).
+import '@fontsource/ibm-plex-sans/400.css';
+import '@fontsource/ibm-plex-sans/500.css';
+import '@fontsource/ibm-plex-sans/600.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import './style.css';
 import { detectPatterns, type Category, type Span } from './patterns';
 
 // ---- category metadata (label + colour + which presets include it) ----
