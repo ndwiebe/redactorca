@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redactor CA — strip client identity before AI, on your own machine</title>
+  <meta name="description" content="Local-first PII redaction for Canadian accounting. Your client data never leaves your computer." />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▦</span>
+      <div>
+        <h1>Redactor<span class="ca">CA</span></h1>
+        <p class="tag">Strip client identity before you paste into AI</p>
+      </div>
+    </div>
+    <div id="trust" class="trust" title="This tool makes zero network calls while you work. Open your browser's Network tab and watch.">
+      🔒 <span id="trust-text">100% on your device · 0 uploads</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="controls">
+      <div class="presets">
+        <span class="lbl">Preset:</span>
+        <button data-preset="all" class="preset active">Everything</button>
+        <button data-preset="payroll" class="preset">Payroll / T4</button>
+        <button data-preset="corporate" class="preset">Corporate</button>
+        <button data-preset="t1" class="preset">Personal / T1</button>
+      </div>
+      <div id="toggles" class="toggles"></div>
+    </section>
+
+    <section class="panes">
+      <div class="pane">
+        <div class="pane-head">
+          <h2>Paste text or drop a file</h2>
+          <label class="filebtn">
+            Choose file<input id="file" type="file" accept=".txt,.csv,.md,.pdf" hidden />
+          </label>
+        </div>
+        <div id="drop" class="drop">
+          <textarea id="input" placeholder="Paste a working paper, note, or schedule here — or drop a .txt / .pdf.
+
+Nothing is uploaded. Redaction runs in this browser tab."></textarea>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head">
+          <h2>Detected &amp; redacted</h2>
+          <div class="outbtns">
+            <button id="copy">Copy clean text</button>
+            <button id="download">Download .txt</button>
+          </div>
+        </div>
+        <div id="output" class="output" aria-live="polite"><p class="empty">Redacted preview appears here. Dollar amounts are kept on purpose — you want the AI to see the numbers.</p></div>
+      </div>
+    </section>
+
+    <section id="summary" class="summary"></section>
+  </main>
+
+  <footer>
+    <span id="status-line">Pattern layer active · names &amp; PDF coming online…</span>
+    <span>Local-first · no backend · Apache-2.0 components</span>
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
