@@ -111,6 +111,20 @@ describe('detectPatterns — structured IDs, layout-independent', () => {
     expect(cats('Health card (Quebec RAMQ) on file: FORO 9012 3456 78')).toContain('HEALTH');
     expect(cats('Ontario health card (prior address): 1234-567-890-AB')).toContain('HEALTH');
   });
+
+  it('catches street addresses (English and French order, ALL CAPS, units)', () => {
+    expect(cats('88 Wellesley St E')).toContain('ADDRESS');
+    expect(cats('1234 ANY STREET, SUITE 5678')).toContain('ADDRESS');
+    expect(cats('4521 Rue Sainte-Catherine, Apt 7')).toContain('ADDRESS');
+    expect(cats('100 boulevard René-Lévesque Ouest')).toContain('ADDRESS');
+  });
+
+  it('does NOT flag tax line refs, share counts, or amounts as an address (precision)', () => {
+    expect(cats('Line 150 net income 50000')).not.toContain('ADDRESS');
+    expect(cats('issued 50000 Common shares')).not.toContain('ADDRESS');
+    expect(cats('Box 14 Employment income 52,000.00')).not.toContain('ADDRESS');
+    expect(cats('we worked 1500 hours this year')).not.toContain('ADDRESS');
+  });
 });
 
 describe('applyRedaction (consistent pseudonymization)', () => {

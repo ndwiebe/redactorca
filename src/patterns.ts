@@ -13,6 +13,7 @@ export type Category =
   | 'TRUST' // trust account number (T + 8)
   | 'CREDIT_CARD'
   | 'BANK_ACCOUNT'
+  | 'ADDRESS' // civic street address (number + street name + type)
   | 'POSTAL'
   | 'EMAIL'
   | 'PHONE'
@@ -57,6 +58,29 @@ interface Recognizer {
   valid?: (m: string) => boolean;
   score: number;
 }
+
+// Street address: civic number + street name + street-type token. Handles both
+// English order (name then type: "88 Wellesley St E") and French order (type
+// then name: "4521 Rue Sainte-Catherine"). The type list is deliberately CURATED
+// to exclude words that collide with financial vocabulary ("Line 150",
+// "Common shares", "Run rate") — over-claiming an amount or a tax line would
+// break the keep-the-financials promise. 'i' + \p{L} so ALL-CAPS / OCR / accented
+// addresses all match.
+const ADDRESS_RE = (() => {
+  const en = 'Street|St|Avenue|Ave|Av|Road|Rd|Boulevard|Blvd|Boul|Drive|Dr|Crescent|Cres|Court|Crt|Ct|Place|Pl|Lane|Ln|Terrace|Terr|Trail|Circle|Cir|Square|Sq|Highway|Hwy|Parkway|Pkwy|Gardens|Gdns|Heights|Hts|Concession|Sideroad|Sdrd';
+  const fr = 'Rue|Chemin|Ch|Boulevard|Boul|Avenue|Av|Montée|Mtée|Côte|Rang|Promenade|Allée|Place|Carré';
+  const dir = 'NE|NW|SE|SW|North|South|East|West|Nord|Sud|Est|Ouest|N|S|E|W|O';
+  const word = "[\\p{L}0-9][\\p{L}0-9.'’-]*";
+  // separators are same-line only ([ \t], never \n) so a match can't span lines
+  // and swallow a preceding line (e.g. a "1-800 ..." phone line above the address).
+  const unit = "(?:,?[ \\t]+(?:Apt|Apartment|Suite|Ste|Unit|Bureau|PH|RR|#)\\.?[ \\t]*\\d+[A-Za-z]?)?";
+  return new RegExp(
+    `\\b\\d{1,6}(?:[-–]\\d{1,5})?[ \\t]+` +
+      `(?:(?:${fr})\\.?[ \\t]+(?:${word}[ \\t]*){1,4}|(?:${word}[ \\t]+){1,4}(?:${en})\\b\\.?)` +
+      `(?:[ \\t]+(?:${dir})\\b)?${unit}`,
+    'giu',
+  );
+})();
 
 // Order matters: earlier recognizers win overlaps (credit card before phone,
 // SIN before generic digit runs). Overlap resolution happens in detectPatterns.
@@ -125,6 +149,8 @@ const RECOGNIZERS: Recognizer[] = [
   { category: 'BANK_ACCOUNT', re: /(?<=\b(?:transit|branch)\s*(?:no\.?|number|#)?[\s:#.-]{0,4})\d{5}\b/gi, score: 0.8 },
   { category: 'BANK_ACCOUNT', re: /(?<=\b(?:institution|inst)\s*(?:no\.?|number|#)?[\s:#.-]{0,4})\d{3}\b/gi, score: 0.7 },
   { category: 'BANK_ACCOUNT', re: /(?<=\b(?:account|acct|a\/c|compte)\s*(?:no\.?|number|num|#)?[\s:#.-]{0,4})\d[\d \-]{3,14}\d\b/gi, score: 0.8 },
+  // Street address (civic number + street name + type) — see ADDRESS_RE above
+  { category: 'ADDRESS', re: ADDRESS_RE, score: 0.8 },
   // Canadian postal code: A1A 1A1
   { category: 'POSTAL', re: /\b[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d\b/g, score: 0.95 },
   // Email
@@ -164,7 +190,7 @@ export function detectPatterns(text: string): Span[] {
 // Short, human-readable token labels per category (what the AI sees).
 export const TOKEN_LABEL: Record<Category, string> = {
   SIN: 'SIN', BN: 'BIZ', TRUST: 'TRUST', CREDIT_CARD: 'CARD', BANK_ACCOUNT: 'ACCT',
-  POSTAL: 'POSTAL', EMAIL: 'EMAIL', PHONE: 'PHONE', HEALTH: 'HEALTH',
+  ADDRESS: 'ADDR', POSTAL: 'POSTAL', EMAIL: 'EMAIL', PHONE: 'PHONE', HEALTH: 'HEALTH',
   PASSPORT: 'PASSPORT', DL: 'LICENCE', PERSON: 'PERSON',
 };
 

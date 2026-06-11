@@ -17,6 +17,7 @@ const CATS: Record<Category, CatMeta> = {
   TRUST:        { label: 'Trust #',        color: '#f0c93a', presets: new Set(['all', 'corporate', 't1']) },
   CREDIT_CARD:  { label: 'Card',           color: '#e85aa0', presets: new Set(['all', 'payroll', 'corporate', 't1']) },
   BANK_ACCOUNT: { label: 'Bank acct',      color: '#5ad1e8', presets: new Set(['all', 'payroll', 'corporate', 't1']) },
+  ADDRESS:      { label: 'Address',        color: '#c98cff', presets: new Set(['all', 'payroll', 'corporate', 't1']) },
   POSTAL:       { label: 'Postal code',    color: '#9a8cff', presets: new Set(['all', 't1', 'payroll']) },
   EMAIL:        { label: 'Email',          color: '#7ad17a', presets: new Set(['all', 'corporate', 't1', 'payroll']) },
   PHONE:        { label: 'Phone',          color: '#7ad1b0', presets: new Set(['all', 'corporate', 't1', 'payroll']) },
