@@ -124,7 +124,7 @@ const RECOGNIZERS: Recognizer[] = [
   // Each piece is claimed where its own label introduces it.
   { category: 'BANK_ACCOUNT', re: /(?<=\b(?:transit|branch)\s*(?:no\.?|number|#)?[\s:#.-]{0,4})\d{5}\b/gi, score: 0.8 },
   { category: 'BANK_ACCOUNT', re: /(?<=\b(?:institution|inst)\s*(?:no\.?|number|#)?[\s:#.-]{0,4})\d{3}\b/gi, score: 0.7 },
-  { category: 'BANK_ACCOUNT', re: /(?<=\b(?:account|acct|a\/c|compte)\s*(?:no\.?|number|num|#)?[\s:#.-]{0,4})\d{5,12}\b/gi, score: 0.8 },
+  { category: 'BANK_ACCOUNT', re: /(?<=\b(?:account|acct|a\/c|compte)\s*(?:no\.?|number|num|#)?[\s:#.-]{0,4})\d[\d \-]{3,14}\d\b/gi, score: 0.8 },
   // Canadian postal code: A1A 1A1
   { category: 'POSTAL', re: /\b[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d\b/g, score: 0.95 },
   // Email

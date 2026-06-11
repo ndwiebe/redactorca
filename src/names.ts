@@ -49,6 +49,17 @@ function reflow(text: string): string {
   return text.replace(/[ \t]{2,}/g, ' , ');
 }
 
+/**
+ * Title-case ALL-CAPS words. The NER model is cased and trained on normal prose,
+ * so it goes blind on SHOUTED names — and Canadian tax slips MANDATE surnames in
+ * capitals ("Last name in capital letters"), bank statements use them too. This
+ * is a case-only transform, so character offsets are preserved 1:1 and detected
+ * spans still map back to the original text. We match back case-insensitively.
+ */
+function decase(text: string): string {
+  return text.replace(/\p{Lu}[\p{Lu}'’-]+/gu, (w) => w[0] + w.slice(1).toLowerCase());
+}
+
 interface RawTok { entity?: string; entity_group?: string; word?: string; index?: number }
 
 /**
@@ -92,13 +103,14 @@ function personStrings(out: RawTok[]): string[] {
  */
 function nameToRegex(name: string): RegExp {
   const parts = name.split(/\s+/).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean);
-  return new RegExp(`(?<![\\p{L}\\p{N}])${parts.join('\\s+')}(?![\\p{L}\\p{N}])`, 'gu');
+  // case-insensitive: the model sees a title-cased copy, the original may SHOUT.
+  return new RegExp(`(?<![\\p{L}\\p{N}])${parts.join('\\s+')}(?![\\p{L}\\p{N}])`, 'gui');
 }
 
 /** Detect PERSON spans in `text`. Returns char-offset spans against the ORIGINAL text. */
 export async function detectNames(text: string, onProgress?: NamesProgress): Promise<Span[]> {
   const pipe = (await getPipe(onProgress)) as (t: string) => Promise<RawTok[]>;
-  const out = await pipe(reflow(text));
+  const out = await pipe(decase(reflow(text)));
   const names = personStrings(out);
   const spans: Span[] = [];
   const claimed: boolean[] = new Array(text.length).fill(false);
