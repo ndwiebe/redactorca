@@ -47,3 +47,26 @@ export async function extractPdfText(file: File): Promise<PdfExtract> {
     looksScanned: text.replace(/\s/g, '').length < 20 * doc.numPages,
   };
 }
+
+/**
+ * Render every page of a PDF to a canvas, so a scanned / image-only PDF (no text
+ * layer) can be handed to OCR. Rendering happens in the browser; nothing leaves.
+ * `scale` 2 roughly doubles raster resolution, which materially improves OCR
+ * accuracy on small print at an acceptable memory cost.
+ */
+export async function rasterizePdf(file: File, scale = 2): Promise<HTMLCanvasElement[]> {
+  const buf = await file.arrayBuffer(); // read locally; never uploaded
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const canvases: HTMLCanvasElement[] = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d')!;
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    canvases.push(canvas);
+  }
+  return canvases;
+}

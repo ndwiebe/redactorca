@@ -216,21 +216,61 @@ function wireInputs() {
 async function loadFile(f: File) {
   const input = $('#input') as HTMLTextAreaElement;
   const status = $('#status-line');
-  if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+  const lower = f.name.toLowerCase();
+  const isPdf = f.type === 'application/pdf' || lower.endsWith('.pdf');
+  const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?|gif)$/.test(lower);
+
+  // Photo or scan → OCR it in the browser.
+  if (isImage) {
     status.textContent = `Reading ${f.name} in your browser…`;
     try {
-      const { extractPdfText } = await import('./pdf'); // lazy — pdf.js only loads when a PDF is opened
+      const { ocrImage, isOcrLoaded } = await import('./ocr'); // lazy — OCR engine only loads on demand
+      const first = !isOcrLoaded();
+      const text = await ocrImage(f, (pct, label) => {
+        status.textContent = first
+          ? `Loading OCR engine, then reading ${f.name} (${label} ${pct}%) — your image stays here.`
+          : `Reading ${f.name} (${label} ${pct}%) — your image stays here.`;
+      });
+      input.value = text;
+      analyze(text);
+      status.textContent = text.trim()
+        ? `${f.name}: read by on-device OCR. Double-check the text — OCR isn't perfect. Nothing was uploaded.`
+        : `${f.name}: OCR found no readable text. Try a sharper scan or higher contrast.`;
+    } catch (err) {
+      status.textContent = `Couldn't OCR that image. (${(err as Error).message})`;
+    }
+    return;
+  }
+
+  if (isPdf) {
+    status.textContent = `Reading ${f.name} in your browser…`;
+    try {
+      const { extractPdfText, rasterizePdf } = await import('./pdf'); // lazy — pdf.js only loads when a PDF is opened
       const res = await extractPdfText(f);
-      input.value = res.text;
-      analyze(res.text);
-      status.textContent = res.looksScanned
-        ? `${f.name}: little text found — looks scanned. OCR for photos/scans is coming next.`
-        : `${f.name}: ${res.pages} page${res.pages === 1 ? '' : 's'} read locally. Nothing was uploaded.`;
+      if (res.looksScanned) {
+        // No text layer → it's a scan. Rasterize the pages and OCR them.
+        status.textContent = `${f.name} looks scanned — running on-device OCR…`;
+        const { ocrCanvases } = await import('./ocr');
+        const canvases = await rasterizePdf(f);
+        const text = await ocrCanvases(canvases, (pct, label) => {
+          status.textContent = `OCR: ${label}${pct ? ` ${pct}%` : ''} — pages stay on your device.`;
+        });
+        input.value = text;
+        analyze(text);
+        status.textContent = text.trim()
+          ? `${f.name}: ${canvases.length} page${canvases.length === 1 ? '' : 's'} read by on-device OCR. Double-check the text. Nothing was uploaded.`
+          : `${f.name}: OCR found no readable text on those pages.`;
+      } else {
+        input.value = res.text;
+        analyze(res.text);
+        status.textContent = `${f.name}: ${res.pages} page${res.pages === 1 ? '' : 's'} read locally. Nothing was uploaded.`;
+      }
     } catch (err) {
       status.textContent = `Couldn't read that PDF. Try pasting the text instead. (${(err as Error).message})`;
     }
     return;
   }
+
   const text = await f.text(); // read locally, never uploaded
   input.value = text;
   analyze(text);
