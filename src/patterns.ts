@@ -16,7 +16,9 @@ export type Category =
   | 'POSTAL'
   | 'EMAIL'
   | 'PHONE'
-  | 'HEALTH' // provincial health number (best-effort, often labelled)
+  | 'HEALTH' // provincial health number (labelled, since 9-digit shape collides with SIN)
+  | 'PASSPORT' // Canadian passport: 2 letters + 6 digits
+  | 'DL' // driver's licence (labelled — formats vary wildly by province)
   | 'PERSON'; // filled by the neural layer, not here
 
 export interface Span {
@@ -77,6 +79,22 @@ const RECOGNIZERS: Recognizer[] = [
     },
     score: 1,
   },
+  // Provincial health number — label-anchored (its 7–12 digit shape collides with
+  // SIN/phone, so we only claim it when introduced by a health label). Lookbehind
+  // keeps the match = the number itself. Captures OHIP's trailing version letter.
+  {
+    category: 'HEALTH',
+    re: /(?<=\b(?:health\s*(?:card|number|no\.?|#)?|PHN|OHIP|MSP|RAMQ|AHC)\b[\s:#-]{0,4})\d(?:[\d ]{5,11})\d[A-Z]?\b/gi,
+    score: 0.95,
+  },
+  // Driver's licence — label-anchored (per-province formats vary too much to shape-match safely)
+  {
+    category: 'DL',
+    re: /(?<=\b(?:driver'?s?\s*licen[cs]e|licen[cs]e\s*(?:no\.?|#|number)?|DL)\b[\s:#-]{0,4})[A-Z0-9][A-Z0-9 -]{4,14}\b/gi,
+    score: 0.85,
+  },
+  // Canadian passport: 2 letters + 6 digits (distinctive shape)
+  { category: 'PASSPORT', re: /\b[A-Z]{2}\s?\d{6}\b/g, score: 0.8 },
   // Canadian SIN: 9 digits in 3-3-3 grouping, Luhn-valid
   {
     category: 'SIN',

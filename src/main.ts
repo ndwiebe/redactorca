@@ -20,6 +20,8 @@ const CATS: Record<Category, CatMeta> = {
   EMAIL:        { label: 'Email',          color: '#7ad17a', presets: new Set(['all', 'corporate', 't1', 'payroll']) },
   PHONE:        { label: 'Phone',          color: '#7ad1b0', presets: new Set(['all', 'corporate', 't1', 'payroll']) },
   HEALTH:       { label: 'Health #',       color: '#ff9ecf', presets: new Set(['all', 't1']) },
+  PASSPORT:     { label: 'Passport',       color: '#d98c5f', presets: new Set(['all', 't1', 'corporate']) },
+  DL:           { label: 'Licence',        color: '#b0a04a', presets: new Set(['all', 't1']) },
   PERSON:       { label: 'Name',           color: '#c9a227', presets: new Set(['all', 'payroll', 'corporate', 't1']) },
 };
 

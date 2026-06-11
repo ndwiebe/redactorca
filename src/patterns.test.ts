@@ -57,6 +57,26 @@ describe('detectPatterns — structured IDs, layout-independent', () => {
   it('rejects a non-Luhn 9-digit string as a SIN (precision)', () => {
     expect(cats('ref number 123456789 in the file')).not.toContain('SIN');
   });
+
+  it('catches a labelled provincial health number, not as SIN', () => {
+    const c = cats('OHIP: 1234 567 890 AB');
+    expect(c).toContain('HEALTH');
+    const c2 = cats('PHN 123456789');
+    expect(c2).toContain('HEALTH');
+  });
+
+  it('catches a labelled driver licence', () => {
+    expect(cats("Driver's licence: T0360-12345-67890")).toContain('DL');
+  });
+
+  it('catches a Canadian passport shape', () => {
+    expect(cats('Passport GA123456 issued 2021')).toContain('PASSPORT');
+  });
+
+  it('does not flag a bare unlabelled 9-digit health-shaped number as HEALTH', () => {
+    // no health label -> should not be HEALTH (avoids over-claiming)
+    expect(cats('widget count 987654321 units')).not.toContain('HEALTH');
+  });
 });
 
 describe('applyRedaction', () => {
