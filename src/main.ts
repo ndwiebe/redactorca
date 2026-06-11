@@ -6,7 +6,8 @@ import '@fontsource/hanken-grotesk/600.css';
 import '@fontsource/hanken-grotesk/800.css';
 import '@fontsource/jetbrains-mono/400.css';
 import './style.css';
-import { detectPatterns, type Category, type Span } from './patterns';
+import { detectPatterns, assignTokens, applyRedaction, type Category, type Span, type Tokenized } from './patterns';
+import { detectNames, isNamesLoaded } from './names';
 
 // ---- category metadata (label + colour + which presets include it) ----
 interface CatMeta { label: string; color: string; presets: Set<string>; }
@@ -29,7 +30,11 @@ const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
 const enabled = new Set<Category>(Object.keys(CATS) as Category[]);
 const rejected = new Set<string>(); // span keys the user manually turned off
 let currentText = '';
+let patternSpans: Span[] = [];
+let nameSpans: Span[] = [];
 let currentSpans: Span[] = [];
+let namesOn = false;
+let tokens: Tokenized | null = null; // stable pseudonym map for the current render
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
@@ -67,11 +72,44 @@ function applyPreset(preset: string) {
 }
 
 // ---- core: detect + render highlighted output ----
+function recompute() {
+  currentSpans = [...patternSpans, ...nameSpans].sort((a, b) => a.start - b.start);
+}
+
 function analyze(text: string) {
   currentText = text;
-  currentSpans = detectPatterns(text);
+  patternSpans = detectPatterns(text);
+  nameSpans = [];
   rejected.clear();
+  recompute();
   render();
+  if (namesOn && text.trim()) void runNames(); // re-run names if the layer is active
+}
+
+async function runNames() {
+  const status = $('#status-line');
+  const btn = $('#names-btn') as HTMLButtonElement;
+  namesOn = true;
+  btn.classList.add('active');
+  btn.disabled = true;
+  const first = !isNamesLoaded();
+  btn.textContent = first ? 'Loading name model…' : 'Detecting names…';
+  try {
+    const found = await detectNames(currentText, (pct, label) => {
+      if (first) { btn.textContent = `Loading model ${pct}%`; status.textContent = `Fetching name model (${label}) — model only, your text stays here.`; }
+    });
+    // drop name spans that overlap a pattern span (pattern wins)
+    nameSpans = found.filter((n) => !patternSpans.some((p) => n.start < p.end && p.start < n.end));
+    recompute();
+    render();
+    status.textContent = `Name detection on. ${nameSpans.length} name${nameSpans.length === 1 ? '' : 's'} found. Model cached — works offline now.`;
+  } catch (err) {
+    status.textContent = `Name model failed to load (${(err as Error).message}). Pattern redaction still works.`;
+    namesOn = false; btn.classList.remove('active');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = namesOn ? 'Names: on' : 'Detect names';
+  }
 }
 
 function activeSpans(): Span[] {
@@ -85,6 +123,9 @@ function render() {
     $('#summary').innerHTML = '';
     return;
   }
+  // Tokenize the active (to-be-redacted) spans so each distinct entity shows its
+  // stable pseudonym (PERSON 1, SIN 2…) — the differentiation the AI needs.
+  tokens = assignTokens(activeSpans());
   const spans = [...currentSpans].sort((a, b) => a.start - b.start);
   let html = '';
   let cursor = 0;
@@ -93,15 +134,17 @@ function render() {
     html += escapeHtml(currentText.slice(cursor, s.start));
     const on = enabled.has(s.category) && !rejected.has(spanKey(s));
     const m = CATS[s.category];
-    // When redacted, the real text is replaced by block glyphs (not just hidden
-    // under CSS) so it can't be selected or copied out of the preview.
-    const body = on ? '█'.repeat([...s.text].length) : escapeHtml(s.text);
-    html += `<mark class="bar ${on ? '' : 'off'}" data-key="${spanKey(s)}" title="${m.label} — click to ${on ? 'reveal' : 're-redact'}">${body}</mark>`;
+    if (on) {
+      const tok = tokens.tokenForSpan.get(s) ?? s.category;
+      html += `<mark class="tok" data-key="${spanKey(s)}" title="${m.label} — was: ${escapeHtml(s.text)} — click to reveal">${escapeHtml(tok.replace('_', ' '))}</mark>`;
+    } else {
+      html += `<mark class="tok off" data-key="${spanKey(s)}" title="${m.label} — click to re-redact">${escapeHtml(s.text)}</mark>`;
+    }
     cursor = s.end;
   }
   html += escapeHtml(currentText.slice(cursor));
   out.innerHTML = html;
-  out.querySelectorAll('mark.r').forEach((el) => {
+  out.querySelectorAll('mark.tok').forEach((el) => {
     el.addEventListener('click', () => {
       const key = (el as HTMLElement).dataset.key!;
       if (rejected.has(key)) rejected.delete(key); else rejected.add(key);
@@ -124,15 +167,8 @@ function renderSummary() {
 }
 
 function redactedText(): string {
-  const spans = activeSpans().sort((a, b) => a.start - b.start);
-  let out = '';
-  let cursor = 0;
-  for (const s of spans) {
-    if (s.start < cursor) continue;
-    out += currentText.slice(cursor, s.start) + `[${s.category}]`;
-    cursor = s.end;
-  }
-  return out + currentText.slice(cursor);
+  const active = activeSpans();
+  return applyRedaction(currentText, active, tokens ?? assignTokens(active));
 }
 
 // ---- inputs ----
@@ -153,6 +189,8 @@ function wireInputs() {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (f) loadFile(f);
   });
+
+  $('#names-btn').addEventListener('click', () => { void runNames(); });
 
   document.querySelectorAll('.preset').forEach((b) =>
     b.addEventListener('click', () => {

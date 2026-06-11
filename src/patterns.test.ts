@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPatterns, applyRedaction, luhnValid } from './patterns';
+import { detectPatterns, applyRedaction, assignTokens, luhnValid } from './patterns';
 
 // Luhn-valid synthetic SINs (generated; pass the checksum like real SINs).
 const SIN_A = '700 042 344';
@@ -79,19 +79,27 @@ describe('detectPatterns — structured IDs, layout-independent', () => {
   });
 });
 
-describe('applyRedaction', () => {
-  it('label mode replaces spans with category tokens, keeps amounts', () => {
+describe('applyRedaction (consistent pseudonymization)', () => {
+  it('replaces each entity with a stable numbered token, keeps amounts', () => {
     const text = `${SIN_A} earned 9,800.00`;
-    const out = applyRedaction(text, detectPatterns(text), { mode: 'label' });
-    expect(out).toContain('[SIN]');
+    const out = applyRedaction(text, detectPatterns(text));
+    expect(out).toContain('[SIN_1]');
     expect(out).toContain('9,800.00');
     expect(out).not.toContain(SIN_A);
   });
 
-  it('block mode masks with full-width blocks', () => {
-    const text = `SIN ${SIN_A}`;
-    const out = applyRedaction(text, detectPatterns(text), { mode: 'block' });
-    expect(out).toContain('█');
-    expect(out).not.toContain(SIN_A);
+  it('same value -> same token; different values -> different tokens', () => {
+    const text = `${SIN_A} and ${SIN_B} and again ${SIN_A}`;
+    const spans = detectPatterns(text);
+    const out = applyRedaction(text, spans);
+    // SIN_A appears twice -> both SIN_1; SIN_B -> SIN_2
+    expect(out).toBe('[SIN_1] and [SIN_2] and again [SIN_1]');
+  });
+
+  it('assignTokens builds a re-identify registry', () => {
+    const text = `${SIN_A}, ${SIN_B}`;
+    const t = assignTokens(detectPatterns(text));
+    expect(t.registry.get('SIN_1')).toBe(SIN_A);
+    expect(t.registry.get('SIN_2')).toBe(SIN_B);
   });
 });

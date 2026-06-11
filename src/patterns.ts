@@ -140,21 +140,59 @@ export function detectPatterns(text: string): Span[] {
   return spans;
 }
 
-/** Apply spans to text, replacing each with a mask (█ run) or a labelled token. */
-export function applyRedaction(
-  text: string,
-  spans: Span[],
-  opts: { mode: 'block' | 'label' } = { mode: 'label' },
-): string {
+// Short, human-readable token labels per category (what the AI sees).
+export const TOKEN_LABEL: Record<Category, string> = {
+  SIN: 'SIN', BN: 'BIZ', TRUST: 'TRUST', CREDIT_CARD: 'CARD', BANK_ACCOUNT: 'ACCT',
+  POSTAL: 'POSTAL', EMAIL: 'EMAIL', PHONE: 'PHONE', HEALTH: 'HEALTH',
+  PASSPORT: 'PASSPORT', DL: 'LICENCE', PERSON: 'PERSON',
+};
+
+/** Normalize a value so the same entity maps to one token despite formatting. */
+function normalize(category: Category, text: string): string {
+  if (category === 'EMAIL' || category === 'PERSON') return text.toLowerCase().replace(/\s+/g, ' ').trim();
+  return text.replace(/[\s-]/g, '').toUpperCase(); // numbers/IDs: ignore spaces & dashes
+}
+
+export interface Tokenized {
+  /** span (by key) -> stable token like "PERSON_1" */
+  tokenForSpan: Map<Span, string>;
+  /** token -> the original value it replaced (the re-identify map; stays local) */
+  registry: Map<string, string>;
+}
+
+/**
+ * Consistent pseudonymization: assign each DISTINCT entity a stable numbered
+ * token, reused everywhere it appears. Preserves who-is-who for the AI while
+ * removing identity. Numbering is per-category, in document order.
+ */
+export function assignTokens(spans: Span[]): Tokenized {
+  const order = [...spans].sort((a, b) => a.start - b.start);
+  const perCat = new Map<Category, Map<string, number>>();
+  const tokenForSpan = new Map<Span, string>();
+  const registry = new Map<string, string>();
+  for (const s of order) {
+    const norm = normalize(s.category, s.text);
+    let seen = perCat.get(s.category);
+    if (!seen) { seen = new Map(); perCat.set(s.category, seen); }
+    let idx = seen.get(norm);
+    if (idx === undefined) { idx = seen.size + 1; seen.set(norm, idx); }
+    const token = `${TOKEN_LABEL[s.category]}_${idx}`;
+    tokenForSpan.set(s, token);
+    if (!registry.has(token)) registry.set(token, s.text);
+  }
+  return { tokenForSpan, registry };
+}
+
+/** Produce AI-safe text: each entity replaced by its stable [TOKEN_n]. */
+export function applyRedaction(text: string, spans: Span[], tokens?: Tokenized): string {
+  const t = tokens ?? assignTokens(spans);
   const sorted = [...spans].sort((a, b) => a.start - b.start);
   let out = '';
   let cursor = 0;
   for (const s of sorted) {
     if (s.start < cursor) continue; // skip overlaps defensively
-    out += text.slice(cursor, s.start);
-    out += opts.mode === 'block' ? '█'.repeat(s.end - s.start) : `[${s.category}]`;
+    out += text.slice(cursor, s.start) + `[${t.tokenForSpan.get(s) ?? s.category}]`;
     cursor = s.end;
   }
-  out += text.slice(cursor);
-  return out;
+  return out + text.slice(cursor);
 }

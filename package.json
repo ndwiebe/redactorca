@@ -18,6 +18,7 @@
     "vitest": "^2.1.0"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "pdfjs-dist": "^6.0.227"
   }
 }
