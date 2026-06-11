@@ -1,9 +1,10 @@
 // Self-hosted fonts (bundled into the build — no external/CDN request, so the
 // "0 network calls" promise stays literally true).
-import '@fontsource/ibm-plex-sans/400.css';
-import '@fontsource/ibm-plex-sans/500.css';
-import '@fontsource/ibm-plex-sans/600.css';
-import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/hanken-grotesk/400.css';
+import '@fontsource/hanken-grotesk/500.css';
+import '@fontsource/hanken-grotesk/600.css';
+import '@fontsource/hanken-grotesk/800.css';
+import '@fontsource/jetbrains-mono/400.css';
 import './style.css';
 import { detectPatterns, type Category, type Span } from './patterns';
 
@@ -90,8 +91,10 @@ function render() {
     html += escapeHtml(currentText.slice(cursor, s.start));
     const on = enabled.has(s.category) && !rejected.has(spanKey(s));
     const m = CATS[s.category];
-    const masked = '█'.repeat(s.end - s.start);
-    html += `<mark class="r ${on ? '' : 'off'}" data-key="${spanKey(s)}" style="background:${m.color}" title="${m.label} — click to toggle">${on ? masked : escapeHtml(s.text)}</mark>`;
+    // When redacted, the real text is replaced by block glyphs (not just hidden
+    // under CSS) so it can't be selected or copied out of the preview.
+    const body = on ? '█'.repeat([...s.text].length) : escapeHtml(s.text);
+    html += `<mark class="bar ${on ? '' : 'off'}" data-key="${spanKey(s)}" title="${m.label} — click to ${on ? 'reveal' : 're-redact'}">${body}</mark>`;
     cursor = s.end;
   }
   html += escapeHtml(currentText.slice(cursor));
@@ -110,11 +113,12 @@ function renderSummary() {
   const counts: Partial<Record<Category, number>> = {};
   for (const s of activeSpans()) counts[s.category] = (counts[s.category] || 0) + 1;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (total === 0) { $('#summary').innerHTML = ''; return; }
   const chips = Object.entries(counts)
-    .map(([c, n]) => `<span class="chip" style="border-color:${CATS[c as Category].color}66">${CATS[c as Category].label}: <b>${n}</b></span>`)
+    .map(([c, n]) => `<span class="chip"><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${CATS[c as Category].color};margin-right:6px"></span>${CATS[c as Category].label}: <b>${n}</b></span>`)
     .join('');
   $('#summary').innerHTML =
-    `<span class="chip"><b>${total}</b> item${total === 1 ? '' : 's'} will be redacted</span>` + chips;
+    `<span class="chip total"><b>${total}</b> item${total === 1 ? '' : 's'} redacted</span>` + chips;
 }
 
 function redactedText(): string {

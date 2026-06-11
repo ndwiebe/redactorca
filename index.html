@@ -3,36 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Redactor CA — strip client identity before AI, on your own machine</title>
-  <meta name="description" content="Local-first PII redaction for Canadian accounting. Your client data never leaves your computer." />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322c55e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.5 4 5.5v6c0 4.5 3.2 8 8 10 4.8-2 8-5.5 8-10v-6L12 2.5Z'/%3E%3Cpath d='M9 12.2l2.2 2.2L15.5 10'/%3E%3C/svg%3E" />
+  <title>RedactorCA — keep client data off the internet</title>
+  <meta name="description" content="Black out client identity before you paste a file into AI. Runs entirely in your browser. Nothing is ever uploaded." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='9.5' width='18' height='5' rx='1' fill='%232a2620'/%3E%3C/svg%3E" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2.5 4 5.5v6c0 4.5 3.2 8 8 10 4.8-2 8-5.5 8-10v-6L12 2.5Z"/>
-          <path d="M9 12.2l2.2 2.2L15.5 10"/>
-        </svg>
-      </span>
-      <div>
-        <h1>Redactor<span class="ca">CA</span></h1>
-        <p class="tag">Strip client identity before you paste into AI</p>
-      </div>
-    </div>
-    <div id="trust" class="trust" title="This tool makes zero network calls while you work. Open your browser's Network tab and watch — it stays empty.">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
-      </svg>
-      <span id="trust-text">100% on your device · 0 uploads</span>
+  <header class="nav">
+    <a class="wordmark" href="/">Redactor<span class="bar">█</span>CA</a>
+    <div id="trust" class="trust" title="This page makes zero network requests while you work. Open your browser's Network tab and watch it stay empty.">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      <span>Nothing leaves this page</span>
     </div>
   </header>
 
-  <main>
+  <section class="hero">
+    <p class="kicker">For accountants who want to use AI without the risk</p>
+    <h1>Use AI on client files.<br />Keep <span id="hero-redact" class="hero-redact"><span class="word">their&nbsp;SIN</span></span> off the internet.</h1>
+    <p class="sub">RedactorCA blacks out names, SINs, business numbers and account details before you paste a working paper into ChatGPT or Copilot. It runs entirely in this browser tab. No upload, no account, no server. The numbers you actually need stay; the identities don't.</p>
+    <a href="#tool" class="cta">Try it on a file <span aria-hidden="true">↓</span></a>
+  </section>
+
+  <main id="tool">
+    <div class="tool-head">
+      <h2>Paste a document, watch it get redacted</h2>
+      <p class="tool-note">Real redaction happens as you type. Nothing is sent anywhere.</p>
+    </div>
+
     <section class="controls">
-      <div class="presets">
-        <span class="lbl">Preset:</span>
+      <div class="presets" role="group" aria-label="Redaction preset">
         <button data-preset="all" class="preset active">Everything</button>
         <button data-preset="payroll" class="preset">Payroll / T4</button>
         <button data-preset="corporate" class="preset">Corporate</button>
@@ -44,39 +42,56 @@
     <section class="panes">
       <div class="pane">
         <div class="pane-head">
-          <h2>Paste text or drop a file</h2>
-          <label class="filebtn">
-            Choose file<input id="file" type="file" accept=".txt,.csv,.md,.pdf" hidden />
-          </label>
+          <span class="pane-label">Your document</span>
+          <label class="filebtn">Open a file<input id="file" type="file" accept=".txt,.csv,.md,.pdf" hidden /></label>
         </div>
         <div id="drop" class="drop">
-          <textarea id="input" placeholder="Paste a working paper, note, or schedule here — or drop a .txt / .pdf.
+          <textarea id="input" spellcheck="false" placeholder="Paste a working paper, client note, or schedule here.
 
-Nothing is uploaded. Redaction runs in this browser tab."></textarea>
+It is read inside this browser tab and never uploaded."></textarea>
         </div>
         <p class="reassure">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
-          Files are read inside your browser and never sent anywhere.
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Read in your browser. Never sent anywhere.
         </p>
       </div>
 
       <div class="pane">
         <div class="pane-head">
-          <h2>Detected &amp; redacted</h2>
+          <span class="pane-label">Safe to paste into AI</span>
           <div class="outbtns">
-            <button id="copy">Copy clean text</button>
-            <button id="download">Download .txt</button>
+            <button id="copy">Copy</button>
+            <button id="download">Download</button>
           </div>
         </div>
-        <div id="output" class="output" aria-live="polite"><p class="empty">Redacted preview appears here. Dollar amounts are kept on purpose — you want the AI to see the numbers.</p></div>
+        <div id="output" class="output" aria-live="polite"><p class="empty">Your redacted document appears here. Click any black bar to reveal it. Dollar amounts are kept on purpose — the AI should still see the figures.</p></div>
       </div>
     </section>
 
     <section id="summary" class="summary"></section>
   </main>
 
+  <section class="proof">
+    <div class="proof-item">
+      <span class="proof-n">01</span>
+      <h3>No upload, ever</h3>
+      <p>The file is read in your browser. Open the Network tab and watch it stay empty while you redact.</p>
+    </div>
+    <div class="proof-item">
+      <span class="proof-n">02</span>
+      <h3>No account, no server</h3>
+      <p>There is no backend to breach and nothing stored. Close the tab and the document is gone.</p>
+    </div>
+    <div class="proof-item">
+      <span class="proof-n">03</span>
+      <h3>Built for Canadian files</h3>
+      <p>SIN, Business Number, GST/HST and program accounts, trust and bank numbers — recognized out of the box.</p>
+    </div>
+  </section>
+
   <footer>
-    <span id="status-line">Pattern layer active · names &amp; PDF coming online…</span>
+    <span class="foot-mark">Redactor<span class="bar">█</span>CA</span>
+    <span id="status-line">Pattern layer active. Name detection &amp; PDF reading coming next.</span>
     <span>Local-first · no backend · Apache-2.0 components</span>
   </footer>
 
