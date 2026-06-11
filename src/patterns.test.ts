@@ -77,6 +77,40 @@ describe('detectPatterns — structured IDs, layout-independent', () => {
     // no health label -> should not be HEALTH (avoids over-claiming)
     expect(cats('widget count 987654321 units')).not.toContain('HEALTH');
   });
+
+  // --- regressions from the real-document stress test (2026-06-11) ---
+
+  it('redacts a LABELLED SIN even when it fails Luhn (mistyped/sample SINs still leak)', () => {
+    // 130 692 545 is NOT Luhn-valid, but it is explicitly labelled a SIN.
+    expect(cats('N.A.S./SIN 130 692 545')).toContain('SIN');
+    expect(cats('Social insurance number 805 123 456')).toContain('SIN');
+    expect(cats('SIN: 130-692-546')).toContain('SIN'); // dashes
+    expect(cats('SIN 130692547')).toContain('SIN'); // no separators
+  });
+
+  it('still requires Luhn for an UNLABELLED 9-digit number (precision)', () => {
+    expect(cats('reference 130 692 545 attached')).not.toContain('SIN');
+  });
+
+  it('catches a Business Number with CRA spacing ("12 3456 789 RP 0001")', () => {
+    expect(cats('Business Number 12 3456 789 RP 0001')).toContain('BN');
+    expect(cats('8 6 7 5 3 0 9 0 9 RC 0001')).toContain('BN'); // fully digit-spaced
+  });
+
+  it('catches inline bank coordinates (transit / institution / account)', () => {
+    const c = cats('Direct deposit: transit 12345 institution 004 account 7654321');
+    expect(c.filter((x) => x === 'BANK_ACCOUNT').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does NOT flag a dollar figure as a bank account when no account label precedes it', () => {
+    // "7654321" here is an amount, not labelled "account"
+    expect(cats('Office and administration expense 7654321')).not.toContain('BANK_ACCOUNT');
+  });
+
+  it('catches RAMQ (alpha) and dashed OHIP health numbers behind qualified labels', () => {
+    expect(cats('Health card (Quebec RAMQ) on file: FORO 9012 3456 78')).toContain('HEALTH');
+    expect(cats('Ontario health card (prior address): 1234-567-890-AB')).toContain('HEALTH');
+  });
 });
 
 describe('applyRedaction (consistent pseudonymization)', () => {

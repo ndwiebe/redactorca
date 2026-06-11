@@ -61,10 +61,13 @@ interface Recognizer {
 // Order matters: earlier recognizers win overlaps (credit card before phone,
 // SIN before generic digit runs). Overlap resolution happens in detectPatterns.
 const RECOGNIZERS: Recognizer[] = [
-  // CRA Business Number + program account: 9 digits + RC/RT/RP/RZ + 4-digit ref
+  // CRA Business Number + program account: 9 digits + RC/RT/RP/RZ + 4-digit ref.
+  // Real CRA forms space the parts out ("12 3456 789 RP 0001", even fully
+  // digit-spaced), so tolerate internal spaces throughout — the program-letter
+  // anchor keeps false positives away.
   {
     category: 'BN',
-    re: /\b\d{5}\s?\d{4}\s?R[CTPZ]\s?\d{4}\b/gi,
+    re: /\b(?:\d[ ]?){8}\d\s*R[CTPZ]\s*(?:\d[ ]?){3}\d\b/gi,
     score: 1,
   },
   // Trust account number: T + 8 digits
@@ -81,10 +84,12 @@ const RECOGNIZERS: Recognizer[] = [
   },
   // Provincial health number — label-anchored (its 7–12 digit shape collides with
   // SIN/phone, so we only claim it when introduced by a health label). Lookbehind
-  // keeps the match = the number itself. Captures OHIP's trailing version letter.
+  // keeps the match = the number itself. Handles digit formats with spaces OR
+  // dashes and OHIP's 1–2 trailing version letters, plus Quebec RAMQ's
+  // alphanumeric form (4 letters + 8 digits, e.g. "FORO 9012 3456 78").
   {
     category: 'HEALTH',
-    re: /(?<=\b(?:health\s*(?:card|number|no\.?|#)?|PHN|OHIP|MSP|RAMQ|AHC)\b[\s:#-]{0,4})\d(?:[\d ]{5,11})\d[A-Z]?\b/gi,
+    re: /(?<=\b(?:health\s*(?:card|number|no\.?|#)?|PHN|OHIP|MSP|RAMQ|AHC)\b[^\n\d]{0,28})(?:[A-Z]{4}[\s-]?\d[\d \-]{4,10}\d|\d[\d \-]{5,11}\d)(?:[ -]?[A-Z]{1,2})?\b/gi,
     score: 0.95,
   },
   // Driver's licence — label-anchored (per-province formats vary too much to shape-match safely)
@@ -95,15 +100,31 @@ const RECOGNIZERS: Recognizer[] = [
   },
   // Canadian passport: 2 letters + 6 digits (distinctive shape)
   { category: 'PASSPORT', re: /\b[A-Z]{2}\s?\d{6}\b/g, score: 0.8 },
-  // Canadian SIN: 9 digits in 3-3-3 grouping, Luhn-valid
+  // Canadian SIN — label-anchored: a 9-digit group introduced by a SIN label is
+  // redacted even if it FAILS Luhn. A mistyped or sample SIN is still a SIN, and
+  // leaking a real one over a single transposed digit is the failure that kills
+  // trust. (Unlabeled 9-digit runs still need the checksum, just below.)
+  {
+    category: 'SIN',
+    re: /(?<=\b(?:SIN|NAS|social\s*insurance(?:\s*(?:number|no\.?|#))?|num[ée]ro\s*d['']assurance\s*sociale|assurance\s*sociale)\b[\s:#.\/-]{0,6})\d{3}[ -]?\d{3}[ -]?\d{3}\b/gi,
+    score: 0.95,
+  },
+  // Canadian SIN — unlabeled: 9 digits in 3-3-3 grouping, Luhn-valid (the checksum
+  // is what keeps random 9-digit IDs from being claimed when there's no label).
   {
     category: 'SIN',
     re: /\b\d{3}[ -]?\d{3}[ -]?\d{3}\b/g,
     valid: (m) => luhnValid(m),
     score: 1,
   },
-  // Bank account in dashed transit-institution-account form
+  // Bank account — dashed transit-institution-account form
   { category: 'BANK_ACCOUNT', re: /\b\d{4,5}-\d{2,3}-\d{5,7}\b/g, score: 0.85 },
+  // Bank account — label-anchored Canadian coordinates (transit 5 / institution 3
+  // / account 7–12), as they appear on void cheques and EFT/direct-deposit setup.
+  // Each piece is claimed where its own label introduces it.
+  { category: 'BANK_ACCOUNT', re: /(?<=\b(?:transit|branch)\s*(?:no\.?|number|#)?[\s:#.-]{0,4})\d{5}\b/gi, score: 0.8 },
+  { category: 'BANK_ACCOUNT', re: /(?<=\b(?:institution|inst)\s*(?:no\.?|number|#)?[\s:#.-]{0,4})\d{3}\b/gi, score: 0.7 },
+  { category: 'BANK_ACCOUNT', re: /(?<=\b(?:account|acct|a\/c|compte)\s*(?:no\.?|number|num|#)?[\s:#.-]{0,4})\d{5,12}\b/gi, score: 0.8 },
   // Canadian postal code: A1A 1A1
   { category: 'POSTAL', re: /\b[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d\b/g, score: 0.95 },
   // Email
