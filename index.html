@@ -4,22 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RedactorCA — keep client data off the internet</title>
-  <meta name="description" content="Black out client identity before you paste a file into AI. Runs entirely in your browser. Nothing is ever uploaded." />
+  <meta name="description" content="Strip Canadian client identity (SIN, business number, names, addresses) before you paste a file into ChatGPT or Copilot — swapped for consistent labels so the AI still works. Runs entirely in your browser. Your files are never uploaded." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='9.5' width='18' height='5' rx='1' fill='%232a2620'/%3E%3C/svg%3E" />
 </head>
 <body>
   <header class="nav">
     <a class="wordmark" href="/">Redactor<span class="bar">█</span>CA</a>
-    <div id="trust" class="trust" title="This page makes zero network requests while you work. Open your browser's Network tab and watch it stay empty.">
+    <div id="trust" class="trust" title="Your documents are read and redacted entirely in this tab — they are never uploaded. The detection engine downloads once (the only network request), then works offline.">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-      <span>Nothing leaves this page</span>
+      <span>Your files never leave</span>
     </div>
   </header>
 
   <section class="hero">
     <p class="kicker">For accountants who want to use AI without the risk</p>
     <h1>Use AI on client files.<br />Keep <span id="hero-redact" class="hero-redact"><span class="word">their&nbsp;SIN</span></span> off the internet.</h1>
-    <p class="sub">RedactorCA blacks out names, SINs, business numbers and account details before you paste a working paper into ChatGPT or Copilot. It runs entirely in this browser tab. No upload, no account, no server. The numbers you actually need stay; the identities don't.</p>
+    <p class="sub">RedactorCA swaps names, SINs, business numbers and account details for consistent labels — so the AI still knows who's who — before you paste a working paper into ChatGPT or Copilot. It runs entirely in this browser tab. No upload, no account, no server. The numbers you actually need stay; the identities don't. Paste the AI's answer back and the real names return, here on your machine.</p>
     <a href="#tool" class="cta">Try it on a file <span aria-hidden="true">↓</span></a>
   </section>
 
@@ -65,18 +65,40 @@ It is read inside this browser tab and never uploaded."></textarea>
             <button id="download">Download</button>
           </div>
         </div>
-        <div id="output" class="output" aria-live="polite"><p class="empty">Your redacted document appears here. Click any black bar to reveal it. Dollar amounts are kept on purpose — the AI should still see the figures.</p></div>
+        <div id="output" class="output" aria-live="polite"><p class="empty">Your redacted document appears here. Each identity becomes a consistent label like PERSON 1 — click any token to reveal it. Dollar amounts are kept on purpose, so the AI still sees the figures.</p></div>
       </div>
     </section>
 
     <section id="summary" class="summary"></section>
+
+    <section id="reidentify" class="reid">
+      <div class="tool-head">
+        <h2>Bring the AI's answer back</h2>
+        <p class="tool-note">When the AI replies with the tokens still in it (PERSON_1, SIN_1…), paste it here. The real names come back, right on your device. Want the key as a file? <button id="save-key" class="linkbtn" type="button">Download it (CSV)</button> — keep it private, it holds the real values.</p>
+      </div>
+      <div class="panes">
+        <div class="pane">
+          <div class="pane-head"><span class="pane-label">Paste the AI's reply</span></div>
+          <div class="drop">
+            <textarea id="restore-input" spellcheck="false" placeholder="Paste the response that still has PERSON_1, SIN_1, ADDR_1… in it."></textarea>
+          </div>
+        </div>
+        <div class="pane">
+          <div class="pane-head">
+            <span class="pane-label">Re-identified — for your eyes</span>
+            <div class="outbtns"><button id="restore-copy">Copy</button></div>
+          </div>
+          <div id="restore-output" class="output" aria-live="polite"><p class="empty">Paste the AI's reply (the one still full of PERSON_1, SIN_1…). The tokens turn back into the real values right here — nothing is sent anywhere.</p></div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <section class="proof">
     <div class="proof-item">
       <span class="proof-n">01</span>
       <h3>No upload, ever</h3>
-      <p>The file is read in your browser. Open the Network tab and watch it stay empty while you redact.</p>
+      <p>Your file is read and redacted right in your browser, never uploaded. The only thing that ever downloads is the detection engine itself, once.</p>
     </div>
     <div class="proof-item">
       <span class="proof-n">02</span>
@@ -86,7 +108,7 @@ It is read inside this browser tab and never uploaded."></textarea>
     <div class="proof-item">
       <span class="proof-n">03</span>
       <h3>Built for Canadian files</h3>
-      <p>SIN, Business Number, GST/HST and program accounts, trust and bank numbers — recognized out of the box.</p>
+      <p>SIN, Business Number, GST/HST and program accounts, trust and bank numbers, health cards, addresses and names — recognized out of the box, in English and French.</p>
     </div>
   </section>
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPatterns, applyRedaction, assignTokens, luhnValid } from './patterns';
+import { detectPatterns, applyRedaction, assignTokens, reidentify, luhnValid } from './patterns';
 
 // Luhn-valid synthetic SINs (generated; pass the checksum like real SINs).
 const SIN_A = '700 042 344';
@@ -149,5 +149,27 @@ describe('applyRedaction (consistent pseudonymization)', () => {
     const t = assignTokens(detectPatterns(text));
     expect(t.registry.get('SIN_1')).toBe(SIN_A);
     expect(t.registry.get('SIN_2')).toBe(SIN_B);
+  });
+});
+
+describe('reidentify (turn the AI answer back into real values)', () => {
+  it('restores tokens, with or without brackets', () => {
+    const reg = new Map([['PERSON_1', 'Daniel Tremblay'], ['SIN_1', '700 042 344']]);
+    expect(reidentify('Tell [PERSON_1] their SIN [SIN_1] is on file', reg))
+      .toBe('Tell Daniel Tremblay their SIN 700 042 344 is on file');
+    expect(reidentify('PERSON_1 owes nothing', reg)).toBe('Daniel Tremblay owes nothing');
+  });
+
+  it('restores longer token numbers without clobbering (PERSON_1 vs PERSON_12)', () => {
+    const reg = new Map([['PERSON_1', 'Anita'], ['PERSON_12', 'Bob']]);
+    expect(reidentify('[PERSON_12] met [PERSON_1]', reg)).toBe('Bob met Anita');
+  });
+
+  it('round-trips: redact then re-identify returns the originals', () => {
+    const text = `${SIN_A} paid 9,800.00 to a vendor`;
+    const spans = detectPatterns(text);
+    const t = assignTokens(spans);
+    const redacted = applyRedaction(text, spans, t);
+    expect(reidentify(redacted, t.registry)).toBe(text);
   });
 });

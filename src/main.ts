@@ -6,7 +6,7 @@ import '@fontsource/hanken-grotesk/600.css';
 import '@fontsource/hanken-grotesk/800.css';
 import '@fontsource/jetbrains-mono/400.css';
 import './style.css';
-import { detectPatterns, assignTokens, applyRedaction, type Category, type Span, type Tokenized } from './patterns';
+import { detectPatterns, assignTokens, applyRedaction, reidentify, type Category, type Span, type Tokenized } from './patterns';
 import { detectNames, isNamesLoaded } from './names';
 
 // ---- category metadata (label + colour + which presets include it) ----
@@ -153,6 +153,7 @@ function render() {
     });
   });
   renderSummary();
+  renderRestore(); // keep the re-identify panel in sync with the current key
 }
 
 function renderSummary() {
@@ -170,6 +171,37 @@ function renderSummary() {
 function redactedText(): string {
   const active = activeSpans();
   return applyRedaction(currentText, active, tokens ?? assignTokens(active));
+}
+
+// ---- re-identify: turn the AI's tokenized reply back into real values, locally ----
+function renderRestore() {
+  const inEl = $('#restore-input') as HTMLTextAreaElement;
+  const out = $('#restore-output');
+  const reply = inEl.value;
+  const reg = tokens?.registry;
+  if (!reply.trim()) {
+    out.innerHTML = '<p class="empty">Paste the AI\'s reply (the one still full of PERSON_1, SIN_1…). The tokens turn back into the real values right here — nothing is sent anywhere.</p>';
+    return;
+  }
+  if (!reg || reg.size === 0) {
+    out.innerHTML = '<p class="empty">Redact a document first (above) so there\'s a key to map the tokens back.</p>';
+    return;
+  }
+  out.textContent = reidentify(reply, reg); // textContent = safe, no escaping needed
+}
+
+function downloadKey() {
+  const reg = tokens?.registry;
+  if (!reg || reg.size === 0) { flash($('#save-key'), 'Redact something first'); return; }
+  // CSV: token,original — this IS the sensitive key, it stays on the user's machine.
+  const rows = [['token', 'original_value'], ...[...reg.entries()]];
+  const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'redaction-key.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ---- inputs ----
@@ -212,6 +244,14 @@ function wireInputs() {
     a.click();
     URL.revokeObjectURL(a.href);
   });
+
+  // re-identify panel
+  $('#restore-input').addEventListener('input', renderRestore);
+  $('#restore-copy').addEventListener('click', async () => {
+    await navigator.clipboard.writeText(($('#restore-output') as HTMLElement).textContent || '');
+    flash($('#restore-copy'), 'Copied ✓');
+  });
+  $('#save-key').addEventListener('click', downloadKey);
 }
 
 async function loadFile(f: File) {

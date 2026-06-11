@@ -230,6 +230,24 @@ export function assignTokens(spans: Span[]): Tokenized {
   return { tokenForSpan, registry };
 }
 
+/**
+ * Reverse the pseudonymization: swap every token in the AI's response back to
+ * the original value, using the registry built during redaction. This closes
+ * the loop — the CPA pastes the AI's tokenized answer and gets the real names
+ * back, all locally. Tokens are replaced longest-first so PERSON_12 is restored
+ * before PERSON_1 (no prefix clobbering), and surrounding [brackets] are
+ * optional since the model may echo the token with or without them.
+ */
+export function reidentify(text: string, registry: Map<string, string>): string {
+  const entries = [...registry.entries()].sort((a, b) => b[0].length - a[0].length);
+  let out = text;
+  for (const [token, original] of entries) {
+    const esc = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`\\[?${esc}\\]?`, 'g'), original);
+  }
+  return out;
+}
+
 /** Produce AI-safe text: each entity replaced by its stable [TOKEN_n]. */
 export function applyRedaction(text: string, spans: Span[], tokens?: Tokenized): string {
   const t = tokens ?? assignTokens(spans);
