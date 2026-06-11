@@ -260,6 +260,25 @@ async function loadFile(f: File) {
   const lower = f.name.toLowerCase();
   const isPdf = f.type === 'application/pdf' || lower.endsWith('.pdf');
   const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?|gif)$/.test(lower);
+  const isDocx = lower.endsWith('.docx');
+
+  // Word document → extract text in-browser (mammoth). CPAs live in Word.
+  if (isDocx) {
+    status.textContent = `Reading ${f.name} in your browser…`;
+    try {
+      const mammoth = await import('mammoth'); // lazy — only loads when a .docx is opened
+      const buf = await f.arrayBuffer(); // read locally, never uploaded
+      const res = await mammoth.extractRawText({ arrayBuffer: buf });
+      input.value = res.value;
+      analyze(res.value);
+      status.textContent = res.value.trim()
+        ? `${f.name}: read locally. Nothing was uploaded.`
+        : `${f.name}: no text found in that document.`;
+    } catch (err) {
+      status.textContent = `Couldn't read that Word file. Try pasting the text instead. (${(err as Error).message})`;
+    }
+    return;
+  }
 
   // Photo or scan → OCR it in the browser.
   if (isImage) {
