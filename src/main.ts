@@ -177,10 +177,20 @@ function wireInputs() {
 
 async function loadFile(f: File) {
   const input = $('#input') as HTMLTextAreaElement;
+  const status = $('#status-line');
   if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
-    input.value = '';
-    analyze('');
-    $('#status-line').textContent = 'PDF reading not wired yet in this build — paste text for now.';
+    status.textContent = `Reading ${f.name} in your browser…`;
+    try {
+      const { extractPdfText } = await import('./pdf'); // lazy — pdf.js only loads when a PDF is opened
+      const res = await extractPdfText(f);
+      input.value = res.text;
+      analyze(res.text);
+      status.textContent = res.looksScanned
+        ? `${f.name}: little text found — looks scanned. OCR for photos/scans is coming next.`
+        : `${f.name}: ${res.pages} page${res.pages === 1 ? '' : 's'} read locally. Nothing was uploaded.`;
+    } catch (err) {
+      status.textContent = `Couldn't read that PDF. Try pasting the text instead. (${(err as Error).message})`;
+    }
     return;
   }
   const text = await f.text(); // read locally, never uploaded
