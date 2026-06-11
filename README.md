@@ -33,7 +33,7 @@ Everything runs client-side, in three layers:
 ```bash
 npm install
 npm run dev        # local dev server
-npx vitest run     # 29 tests, including a real-document corpus regression
+npx vitest run     # unit tests + the real-document corpus regression
 npx tsc            # typecheck
 npm run build      # production build
 ```
@@ -48,4 +48,4 @@ Active development. The web app works today; deployment, a strict no-egress CSP 
 
 ## License
 
-[MIT](LICENSE). The name-detection model ([bert-base-multilingual-cased-ner-hrl](https://huggingface.co/Davlan/bert-base-multilingual-cased-ner-hrl), AFL-3.0) is fetched from Hugging Face at runtime and is not distributed with this repository.
+[MIT](LICENSE). The name-detection model ([Xenova/bert-base-multilingual-cased-ner-hrl](https://huggingface.co/Xenova/bert-base-multilingual-cased-ner-hrl) — the ONNX export your browser actually fetches — of [Davlan's NER model](https://huggingface.co/Davlan/bert-base-multilingual-cased-ner-hrl), AFL-3.0) is downloaded from Hugging Face at runtime and is not distributed with this repository.

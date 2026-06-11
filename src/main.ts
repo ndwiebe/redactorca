@@ -262,6 +262,13 @@ async function loadFile(f: File) {
   const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?|gif)$/.test(lower);
   const isDocx = lower.endsWith('.docx');
 
+  // Old binary Word format — mammoth can't read it, and the generic text
+  // fallback would silently analyze mojibake (a fake "success" is a leak risk).
+  if (lower.endsWith('.doc')) {
+    status.textContent = `${f.name}: old Word format (.doc) isn't supported — re-save it as .docx in Word and try again.`;
+    return;
+  }
+
   // Word document → extract text in-browser (mammoth). CPAs live in Word.
   if (isDocx) {
     status.textContent = `Reading ${f.name} in your browser…`;
@@ -332,6 +339,14 @@ async function loadFile(f: File) {
   }
 
   const text = await f.text(); // read locally, never uploaded
+  // Binary sniff: an unknown binary (xlsx, zip, .doc renamed…) decodes to a sea
+  // of U+FFFD. Analyzing that would LOOK like successful redaction while the
+  // real content was never read — fail loudly instead.
+  const junk = (text.match(/�/g) || []).length;
+  if (text.length > 0 && junk / text.length > 0.02) {
+    status.textContent = `${f.name}: this looks like a binary file I can't read as text. Try PDF, Word (.docx), or an image.`;
+    return;
+  }
   input.value = text;
   analyze(text);
 }

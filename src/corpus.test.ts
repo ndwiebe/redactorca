@@ -48,12 +48,22 @@ function parseCorpus(file: string): Sample[] {
         if (!m) continue;
         const valRaw = m[2].trim();
         if (/^\(?none\)?/i.test(valRaw)) { gt[m[1]] = []; continue; }
-        gt[m[1]] = valRaw
+        const vals = valRaw
           .split(/[,;](?![0-9]{3})/)
           // strip the corpus authors' parenthetical annotations ("(row 3, in table cell)")
           .map((v) => v.replace(/\(.*?\)/g, '').replace(/\(.*$/, '').trim())
-          // keep only things that look like actual data values, not prose notes
-          .filter((v) => /\d{4,}|@/.test(v.replace(/[ \-]/g, '')));
+          .filter(Boolean);
+        // amounts_to_KEEP must NOT pass through the data-shape filter below —
+        // it silently dropped every sub-$1,000 amount (642.00 has no 4-digit
+        // run), gutting the precision guarantee for a third of the amounts.
+        gt[m[1]] = m[1] === 'amounts_to_KEEP'
+          ? vals.filter((v) => /\d/.test(v))
+          : vals.filter((v) => {
+              const c = v.replace(/[ \-]/g, '');
+              // actual data values, not prose notes: long digit runs, emails,
+              // or postal-code shape (A1A1A1 — no 4-digit run, was being dropped)
+              return /\d{4,}|@/.test(c) || /^[a-z]\d[a-z]\d[a-z]\d$/i.test(c);
+            });
       }
     }
     out.push({ name, text, gt });
@@ -75,6 +85,11 @@ function score(): Tally {
           const nv = norm(v);
           if (nv.length < 4) continue;
           tally.expected++;
+          // reverse containment (nv.includes(n)) is deliberate leniency: some
+          // ground-truth values bundle several coordinates in one entry
+          // ("transit 12345 institution 003 account 7654321") that detect as
+          // separate spans. It can count a partially-masked value as a hit —
+          // known compromise, revisit if the recall floor is ever raised.
           const hit = allNorm.some((n) => n.includes(nv) || (nv.includes(n) && n.length >= 5));
           if (hit) tally.masked++;
           else tally.leaks.push(`[${s.name}] ${key}: "${v}"`);
