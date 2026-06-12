@@ -20,7 +20,8 @@ export type Category =
   | 'HEALTH' // provincial health number (labelled, since 9-digit shape collides with SIN)
   | 'PASSPORT' // Canadian passport: 2 letters + 6 digits
   | 'DL' // driver's licence (labelled — formats vary wildly by province)
-  | 'PERSON'; // filled by the neural layer, not here
+  | 'PERSON' // filled by the neural layer, not here
+  | 'ORG'; // organisation names — also filled by the neural layer
 
 export interface Span {
   start: number;
@@ -69,7 +70,7 @@ interface Recognizer {
 const ADDRESS_RE = (() => {
   const en = 'Street|St|Avenue|Ave|Av|Road|Rd|Boulevard|Blvd|Boul|Drive|Dr|Crescent|Cres|Court|Crt|Ct|Place|Pl|Lane|Ln|Terrace|Terr|Trail|Circle|Cir|Square|Sq|Highway|Hwy|Parkway|Pkwy|Gardens|Gdns|Heights|Hts|Concession|Sideroad|Sdrd';
   const fr = 'Rue|Chemin|Ch|Boulevard|Boul|Avenue|Av|Montée|Mtée|Côte|Rang|Promenade|Allée|Place|Carré';
-  const dir = 'NE|NW|SE|SW|North|South|East|West|Nord|Sud|Est|Ouest|N|S|E|W|O';
+  const dir = 'NE|NW|SE|SW|Northwest|Northeast|Southwest|Southeast|North|South|East|West|Nord|Sud|Est|Ouest|N|S|E|W|O';
   const word = "[\\p{L}0-9][\\p{L}0-9.'’-]*";
   // separators are same-line only ([ \t], never \n) so a match can't span lines
   // and swallow a preceding line (e.g. a "1-800 ..." phone line above the address).
@@ -191,12 +192,12 @@ export function detectPatterns(text: string): Span[] {
 export const TOKEN_LABEL: Record<Category, string> = {
   SIN: 'SIN', BN: 'BIZ', TRUST: 'TRUST', CREDIT_CARD: 'CARD', BANK_ACCOUNT: 'ACCT',
   ADDRESS: 'ADDR', POSTAL: 'POSTAL', EMAIL: 'EMAIL', PHONE: 'PHONE', HEALTH: 'HEALTH',
-  PASSPORT: 'PASSPORT', DL: 'LICENCE', PERSON: 'PERSON',
+  PASSPORT: 'PASSPORT', DL: 'LICENCE', PERSON: 'PERSON', ORG: 'ORG',
 };
 
 /** Normalize a value so the same entity maps to one token despite formatting. */
 function normalize(category: Category, text: string): string {
-  if (category === 'EMAIL' || category === 'PERSON') return text.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (category === 'EMAIL' || category === 'PERSON' || category === 'ORG') return text.toLowerCase().replace(/\s+/g, ' ').trim();
   return text.replace(/[\s-]/g, '').toUpperCase(); // numbers/IDs: ignore spaces & dashes
 }
 

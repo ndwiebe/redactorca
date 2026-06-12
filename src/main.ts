@@ -25,6 +25,7 @@ const CATS: Record<Category, CatMeta> = {
   PASSPORT:     { label: 'Passport',       color: '#d98c5f', presets: new Set(['all', 't1', 'corporate']) },
   DL:           { label: 'Licence',        color: '#b0a04a', presets: new Set(['all', 't1']) },
   PERSON:       { label: 'Name',           color: '#c9a227', presets: new Set(['all', 'payroll', 'corporate', 't1']) },
+  ORG:          { label: 'Org name',       color: '#a0c45a', presets: new Set(['all', 'corporate', 't1']) },
 };
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;

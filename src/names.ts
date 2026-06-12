@@ -13,7 +13,7 @@
 // copy, recover the detected PERSON surface strings, then locate those strings
 // back in the ORIGINAL text to produce character spans. This catches names that
 // sit inside table cells, which raw detection misses.
-import type { Span } from './patterns';
+import type { Span, Category } from './patterns';
 
 let pipePromise: Promise<unknown> | null = null;
 
@@ -71,18 +71,28 @@ interface RawTok { entity?: string; entity_group?: string; word?: string; index?
  * Instead split on the BIO 'B-' (begin) prefix and on any gap in the token
  * `index` (non-contiguous indices = a non-entity word sat between them).
  */
-function personStrings(out: RawTok[]): string[] {
-  const names: string[] = [];
+interface EntityString { text: string; category: Category; }
+
+function entityStrings(out: RawTok[]): EntityString[] {
+  const results: EntityString[] = [];
   let cur = '';
+  let curCat: Category = 'PERSON';
   let prevIdx = -100;
-  const flush = () => { const s = cur.replace(/\s+/g, ' ').trim(); if (s.length > 1) names.push(s); cur = ''; };
+  const flush = () => {
+    const s = cur.replace(/\s+/g, ' ').trim();
+    if (s.length > 1) results.push({ text: s, category: curCat });
+    cur = '';
+  };
   for (const t of out) {
     const label = (t.entity || t.entity_group || '').toUpperCase();
     const w = t.word || '';
     const idx = typeof t.index === 'number' ? t.index : prevIdx + 1;
-    if (label.includes('PER')) {
-      if (cur && (label.startsWith('B-') || idx !== prevIdx + 1)) flush(); // new entity
-      // BERT word-pieces: '##' continues a token; otherwise it's a new word.
+    const isPer = label.includes('PER');
+    const isOrg = label.includes('ORG');
+    if (isPer || isOrg) {
+      const cat: Category = isPer ? 'PERSON' : 'ORG';
+      if (cur && (label.startsWith('B-') || idx !== prevIdx + 1 || cat !== curCat)) flush();
+      curCat = cat;
       if (w.startsWith('##')) cur += w.slice(2);
       else cur += (cur ? ' ' : '') + w.replace(/^[ Ġ]/, '');
     } else {
@@ -91,7 +101,9 @@ function personStrings(out: RawTok[]): string[] {
     prevIdx = idx;
   }
   flush();
-  return [...new Set(names)];
+  // dedupe by text+category
+  const seen = new Set<string>();
+  return results.filter(e => { const k = `${e.category}:${e.text}`; return seen.has(k) ? false : (seen.add(k), true); });
 }
 
 /**
@@ -107,14 +119,14 @@ function nameToRegex(name: string): RegExp {
   return new RegExp(`(?<![\\p{L}\\p{N}])${parts.join('\\s+')}(?![\\p{L}\\p{N}])`, 'gui');
 }
 
-/** Detect PERSON spans in `text`. Returns char-offset spans against the ORIGINAL text. */
+/** Detect PERSON and ORG spans in `text`. Returns char-offset spans against the ORIGINAL text. */
 export async function detectNames(text: string, onProgress?: NamesProgress): Promise<Span[]> {
   const pipe = (await getPipe(onProgress)) as (t: string) => Promise<RawTok[]>;
   const out = await pipe(decase(reflow(text)));
-  const names = personStrings(out);
+  const entities = entityStrings(out);
   const spans: Span[] = [];
   const claimed: boolean[] = new Array(text.length).fill(false);
-  for (const name of names) {
+  for (const { text: name, category } of entities) {
     const re = nameToRegex(name);
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
@@ -123,7 +135,7 @@ export async function detectNames(text: string, onProgress?: NamesProgress): Pro
       for (let i = start; i < end; i++) if (claimed[i]) { overlap = true; break; }
       if (overlap) continue;
       for (let i = start; i < end; i++) claimed[i] = true;
-      spans.push({ start, end, category: 'PERSON', text: m[0], source: 'neural', score: 0.8 });
+      spans.push({ start, end, category, text: m[0], source: 'neural', score: 0.8 });
     }
   }
   return spans;
