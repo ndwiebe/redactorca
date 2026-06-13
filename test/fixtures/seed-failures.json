@@ -368,6 +368,22 @@
       "target": "Priya Venkataraman",
       "root_cause": "real-doc: neural NER missed surname in a contact field",
       "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN on file:\n746 219 038",
+      "target": "746 219 038",
+      "root_cause": "real-doc: SIN label has words (on file) + a line break before the value; tight whitespace-only gap missed it",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "over-redaction",
+      "input": "SIN: not provided. Total income ,456.00 for the year.",
+      "target": "123,456.00",
+      "root_cause": "worded SIN gap must not swallow a nearby dollar amount",
+      "fixability": "regex-fixable"
     }
   ],
   "extra": [

@@ -166,6 +166,18 @@ const RECOGNIZERS: Recognizer[] = [
     re: /(?<=\b(?:SIN|NAS|social\s*insurance(?:\s*(?:number|no\.?|#))?|num[ée]ro\s*d['']assurance\s*sociale|assurance\s*sociale)[\s:#.\/-]{0,6})\d(?:[ \t.\/-]{0,2}\d){8}(?![0-9])/gi,
     score: 0.95,
   },
+  // Canadian SIN — label-anchored with a WORDED / multi-line gap. Real forms write
+  // "SIN on file:\n123 456 789" — the label sits above the value or has words between
+  // them, so the tight branch above (whitespace-only gap) misses it. Here the label
+  // must be a whole word (\b), the gap is bounded non-digit text (≤24 chars, crosses
+  // line breaks), and the value must be the clean 3-3-3 SIN shape — that combination
+  // keeps "Single …" / "casino …" from being mistaken for a SIN label. Bypasses Luhn:
+  // a labeled SIN is redacted even if it fails the checksum (mistyped/sample).
+  {
+    category: 'SIN',
+    re: /(?<=\b(?:SIN|NAS|social\s*insurance(?:\s*(?:number|no\.?|#))?|num[ée]ro\s*d['']assurance\s*sociale|assurance\s*sociale)\b[^\d]{0,24})\d{3}[ .\/-]?\d{3}[ .\/-]?\d{3}(?![0-9])/gi,
+    score: 0.9,
+  },
   // Canadian SIN — unlabeled: 9 digits in 3-3-3 grouping, Luhn-valid (the checksum
   // is what keeps random 9-digit IDs from being claimed when there's no label).
   // Separator allows space/dash/dot since the Luhn check gates false positives.
