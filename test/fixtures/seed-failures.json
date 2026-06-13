@@ -1,0 +1,871 @@
+{
+  "note": "Empirical failure catalog from the 14-axis adversarial probe (2026-06-13). Seed for the accuracy-convergence loop. seed = synthesis-curated; extra = additional regex-fixable/over-redaction leaks harvested across probes.",
+  "seed": [
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Driver's licence no. D2300-40021-77100 for the taxpayer",
+      "target": "D2300-40021-77100",
+      "root_cause": "DL value class [A-Z0-9][A-Z0-9 -]{4,14} caps the value at 15 chars; the canonical 17-char Ontario/Quebec format A1234-NNNNN-NNNNN is truncated (leaks the final 5-digit group) or, with trailing context, backtracks to no match. This is the single highest-severity structural bug: it leaks the most common real Canadian licence format, and the lenient harness norm() masked it as a 'hit'.",
+      "fixability": "regex-fixable: raise the value cap to ~{4,20} so a 17-char hyphenated licence fits."
+    },
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Quebec licence number L1234-560789-01 alphanumeric",
+      "target": "L1234-560789-01",
+      "root_cause": "DL value class includes a space, so when 'licence' anchors without consuming the optional 'number' label token, the value greedily swallows the literal word 'number ' backwards and \\b then truncates the real ID mid-string. Produces a wrong span AND a partial leak of trailing groups.",
+      "fixability": "regex-fixable: drop space from the value class (or require contiguous hyphen/digit groups) so the label word can't be absorbed; also widen the label alternation."
+    },
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Permis de conduire: P5521-440021-08 (Quebec)",
+      "target": "P5521-440021-08",
+      "root_cause": "French label 'Permis de conduire' (and 'Permit number') is absent from the DL lookbehind alternation, which only knows English driver's/licence/DL. French-language Quebec documents leak licence numbers entirely.",
+      "fixability": "regex-fixable: add 'permis(?:\\s*de\\s*conduire)?' and 'permit' to the DL label alternation."
+    },
+    {
+      "category": "PASSPORT",
+      "kind": "leak",
+      "input": "Passport: ab123456 (as printed on the card)",
+      "target": "ab123456",
+      "root_cause": "PASSPORT regex /\\b[A-Z]{2}\\s?\\d{6}\\b/g has no 'i' flag, so any lowercase or mixed-case passport letters (transcribed, OCR'd, or typed) never match. Highest-yield trivial passport fix.",
+      "fixability": "regex-fixable: add the 'i' flag (note this widens the SKU/invoice over-redaction surface — pair with a guard or accept the recall/precision trade)."
+    },
+    {
+      "category": "PASSPORT",
+      "kind": "leak",
+      "input": "Passport AB-123456 dashed on the form",
+      "target": "AB-123456",
+      "root_cause": "Separator between letters and digits is restricted to \\s? (single optional whitespace); a hyphen — common on printed/typed forms — is not allowed, so the dashed passport leaks.",
+      "fixability": "regex-fixable: broaden the inter-group separator to [ .\\-]? (mirrors SIN/phone normalization)."
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "His SIN is 046.454.286 according to the slip.",
+      "target": "046.454.286",
+      "root_cause": "Both SIN recognizers hard-code the separator class as [ -]; a dot (or slash) separator between groups is never matched even with an explicit SIN label. Dotted/slashed grouping is a routine OCR/print rendering.",
+      "fixability": "regex-fixable: add '.' and '/' to the separator class on the label-anchored SIN branch (the label gates false positives, so this is safe)."
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN: 046  454  286 with doubled spaces from the PDF.",
+      "target": "046  454  286",
+      "root_cause": "Separator quantifier is [ -]? (max ONE char); two consecutive spaces — a routine PDF/OCR extraction artifact — exceed the single allowed separator and the match fails. Same failure class as the BN double-space leak.",
+      "fixability": "regex-fixable: change separator to [ -]* / \\s* on the label-anchored branch so multiple/zero separators are tolerated."
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "Social insurance number 0464 54 286 from OCR.",
+      "target": "0464 54 286",
+      "root_cause": "Grouping is rigidly 3-3-3 (\\d{3}[ -]?\\d{3}[ -]?\\d{3}); odd OCR splits like 4-2-3 or 2-4-3 carry a clear SIN label and all 9 digits but cannot match. The BN recognizer already proves looser digit grouping is safe when an anchor is present.",
+      "fixability": "regex-fixable: on the label-anchored SIN branch, accept a looser 9-digit run, e.g. (?:\\d[ .\\/-]?){8}\\d, mirroring the BN approach."
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "T1 line items SIN046454286 amount 1,250.00",
+      "target": "046454286",
+      "root_cause": "Label fused to value ('SIN046454286'): the label-anchored lookbehind needs \\bSIN\\b + 0-6 separator chars, but 'SIN' is glued to the digits so the \\b after SIN fails; the unlabeled path also can't fire \\b between 'N' and '0'. Common OCR label/value merge and a dense-line concatenation case.",
+      "fixability": "regex-fixable: relax the boundary after the label so a label glued directly to a 9-digit run still anchors."
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "Two SINs jammed: 046454286130692544 (both taxpayers)",
+      "target": "046454286",
+      "root_cause": "Two valid 9-digit SINs concatenated (18 digits) have no internal \\b; the unlabeled SIN regex anchors only at the outer boundary so neither 9-digit window is isolated or Luhn-tested. A sliding/anchorless 9-digit-window Luhn scan would catch both.",
+      "fixability": "regex-fixable: add an anchorless pass that extracts every 9-digit window in a long digit run and Luhn-tests it (and likewise window 9+RC+4 for BN)."
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "Dashed BN as some software prints it: 12-3456-789 RP 0001.",
+      "target": "12-3456-789 RP 0001",
+      "root_cause": "Inter-digit separator in the BN regex is [ ]? (literal ASCII space only); dashes between digit groups break the (?:\\d[ ]?){8}\\d run so the whole BN never matches. Legacy/export formats use dashes.",
+      "fixability": "regex-fixable: widen the inter-digit separator to [ -]? (and the program-letter separator to allow dashes)."
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "Charity/import program account: 123456789 RM 0001 (non-Luhn base, no 'account' label).",
+      "target": "123456789 RM 0001",
+      "root_cause": "BN program letters are hard-coded R[CTPZ], so RM (import/export), RR (charity), RD (excise), RN (insurance), RG (air security) accounts are not recognized. These only incidentally got caught when the 9-digit base was Luhn-valid (SIN fallback) or 'account'-labeled; with a non-Luhn base and no label they leak entirely, and the program-account suffix (e.g. 'RM 0001') is NEVER redacted even when the digits are.",
+      "fixability": "regex-fixable: widen R[CTPZ] to R[A-Z] — the trailing 4-digit ref + \\b keeps false positives low."
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "Double-spaced digits OCR: 12  3456  789 RT 0001.",
+      "target": "12  3456  789 RT 0001",
+      "root_cause": "Each inter-digit gap allows at most one space ([ ]? per digit); OCR/PDF double-spacing between groups exceeds that and breaks the 9-digit run. (Listed in the OCR axis but the remedy is purely a separator-quantifier widening.)",
+      "fixability": "regex-fixable: allow 1-2 spaces between groups (e.g. [ ]{0,2} or \\s* with unicode normalization upstream)."
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "Program ref 5 digits by typo: 123456789 RC 00001 entered.",
+      "target": "123456789 RC 00001",
+      "root_cause": "The reference part is fixed at exactly 4 digits ((?:\\d[ ]?){3}\\d); a 5-digit reference fails the trailing \\b and the WHOLE identifier (including the valid 9-digit BN + RC) is rejected and leaks.",
+      "fixability": "regex-fixable: anchor the BN on the 9-digit base + R[A-Z], and treat the trailing ref as an optional/variable-length tail so a malformed ref doesn't drop the whole match."
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "BN 1 2 3 4 5 6 7 8 9 R C 0 0 0 1 fully spaced.",
+      "target": "R C",
+      "root_cause": "OCR split the program letters with a space ('R C'); the anchor R[CTPZ] requires the two letters adjacent. The BN regex already tolerates fully digit-spaced bases, so R\\s*[A-Z] is a consistent, low-risk widening.",
+      "fixability": "regex-fixable: change R[CTPZ] to R\\s*[A-Z] so an OCR space between the program letters doesn't drop the anchor."
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "Mobile 6045550199 — text only please.",
+      "target": "6045550199",
+      "root_cause": "The regex mandates a separator [ .\\-] between exchange and line group, so a fully unseparated 10-digit phone never matches. This is the most common real-world CRM/spreadsheet-export phone form and leaks outright.",
+      "fixability": "regex-fixable: make the inter-group separators optional ([ .\\-]?) for the 10-digit NANP case; pair with a leading non-digit/boundary guard to limit collision with long IDs."
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "T: (587)555-0199 with no space after paren.",
+      "target": "(587)555-0199",
+      "root_cause": "After the optional \\)? the regex requires a separator [ .\\-] before the exchange; '(587)555-0199' has the paren directly abutting the exchange digits with no separator, so it fails. Same for '+1(204)555-0199'.",
+      "fixability": "regex-fixable: make the separator after the (area-code) group optional when a closing paren is present."
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "Tel: 780/555/0199 (Edmonton branch).",
+      "target": "780/555/0199",
+      "root_cause": "Separator class is only [ .\\-]; slash '/'-delimited phones (European-influenced / OCR form) and comma-delimited ('416,555,0142') are not matched.",
+      "fixability": "regex-fixable: add '/' and ',' to the phone separator class."
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "ph 416-555-0132ext204 fax 905-555-7766",
+      "target": "416-555-0132",
+      "root_cause": "First phone is glued to 'ext204' ('0132ext204'); the trailing \\b after \\d{4} fails because digit->letter inside ...0132e is not a word boundary, so the first (clean) number leaks while the second is caught. Concatenation/glued-suffix boundary failure.",
+      "fixability": "regex-fixable: replace the trailing \\b with a lookahead allowing a non-digit-or-'ext' follower, so a glued extension token doesn't void the match."
+    },
+    {
+      "category": "POSTAL",
+      "kind": "leak",
+      "input": "Double space between triads from PDF extraction: V6B  4N9 here.",
+      "target": "V6B  4N9",
+      "root_cause": "Separator is [ -]? (zero or ONE char); two spaces between triads (routine PDF column-extraction artifact) fail and the full code leaks. TAB and slash separators fail identically.",
+      "fixability": "regex-fixable: widen the postal separator to [ \\t.\\-\\/]* (and add unicode spaces via upstream normalization)."
+    },
+    {
+      "category": "POSTAL",
+      "kind": "leak",
+      "input": "No separator at all jammed against text:codeM5S1A1onfile",
+      "target": "M5S1A1",
+      "root_cause": "The no-separator A1A1A1 form is supported only when word-bounded; the leading/trailing \\b fail when the code is glued to surrounding letters ('codeM5S1A1onfile'). Glued-token boundary failure.",
+      "fixability": "regex-fixable: replace \\b with lookarounds keyed on the letter/digit alternation context rather than \\w boundaries (watch for matching inside longer tokens)."
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Address: 12 Hawthorn Grove, Halifax",
+      "target": "12 Hawthorn Grove",
+      "root_cause": "The curated EN street-type list omits low-collision real Canadian types: Grove, Mews, Loop, Manor, Wynd, Landing, Gate (and Quebec FR generics Sentier, Impasse, Voie, Ruelle, Croissant). The civic-number+name+type shape never closes. These additions are low false-positive risk because they are unambiguous street generics.",
+      "fixability": "regex-fixable: add Grove|Mews|Loop|Manor|Wynd|Landing|Gate to the EN list and Sentier|Impasse|Voie|Ruelle|Croissant to the FR list."
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Habite au 5 Allee des Cedres, Laval",
+      "target": "5 Allee des Cedres",
+      "root_cause": "The FR type list is accent-SENSITIVE — it has 'Allée|Montée|Mtée|Côte' but not the accent-stripped 'Allee/Montee/Mtee/Cote' that keyboards, OCR, and legacy systems routinely produce, so the type token never matches.",
+      "fixability": "regex-fixable: add diacritic-insensitive alternations (or NFD-normalize input) for the FR type list."
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "RR 3, Station Main, Orillia ON",
+      "target": "RR 3",
+      "root_cause": "Rural-route designators ('RR 3', 'Rural Route 5') have no civic-number+street-type shape and are not recognized standalone — 'RR' appears in ADDRESS_RE only as a unit suffix. Common on rural Canadian tax mail; low collision risk.",
+      "fixability": "regex-fixable: add a dedicated '\\bR\\.?R\\.?\\s*\\d{1,3}\\b' / 'Rural Route \\d+' recognizer."
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Bureau situé au 100 3e Rue Est, Québec",
+      "target": "100 3e Rue Est",
+      "root_cause": "Quebec ordinal grid streets ('3e Rue', '4e Avenue') put an ordinal token between the civic number and the FR type; the FR branch expects the type immediately after the number, and 'numéro 1230'/'1230, 4e Avenue' also breaks the mandatory '\\d+[ \\t]+' separator (no comma allowed). Type-first/number-after Quebec formats never match.",
+      "fixability": "regex-fixable (trickier): recognize an ordinal name token \\d+(?:e|re|er) as a street name and allow a comma-tolerant civic-number separator; confine with a required type word to avoid tax-line-number false positives."
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "Manitoba PHIN: 123456789 on the claim.",
+      "target": "123456789",
+      "root_cause": "The label alternation (health card/number/no/#, PHN, OHIP, MSP, RAMQ, AHC) misses real provincial labels: Manitoba PHIN (\\bPHN\\b does not match 'PHIN'), Alberta AHCIP (\\bAHC\\b fails before 'IP'), and generic 'Medicare'/'Medicare card'/'Medicare number'. Clean 9-10 digit provincial health numbers leak.",
+      "fixability": "regex-fixable: add PHIN, AHCIP, Medicare (and relax the \\b after AHC) to the HEALTH label alternation."
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "Numéro d'assurance maladie: 4567 891 234",
+      "target": "4567 891 234",
+      "root_cause": "All French health-insurance labels ('assurance maladie', 'numéro/régime d'assurance maladie') are absent; only the acronym RAMQ is known. For a bilingual Canadian tool this is the most important HEALTH miss — RAMQ bodies would be caught if a French label anchored them.",
+      "fixability": "regex-fixable: add the French 'assurance maladie' label family to the HEALTH alternation."
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "Ont. health card: 1234.567.890 (dot separators)",
+      "target": "1234.567.890",
+      "root_cause": "The body separator class is [\\d \\-] (space and dash only); dot/period separators (common in OCR/print layouts) break the run so the dotted number is not matched despite the health label.",
+      "fixability": "regex-fixable: add '.' to the HEALTH body separator class (low risk given the label anchor)."
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "OHIP number for the dependant child claimed is 5566778899 GH",
+      "target": "5566778899 GH",
+      "root_cause": "The label->number lookbehind gap is capped at [^\\n\\d]{0,28}; when the prose gap between label and number exceeds 28 chars the anchor expires and the number leaks. (A very long clause is the ambiguous edge; a modest widening is the regex-fixable core.)",
+      "fixability": "regex-fixable: widen the lookbehind gap cap (e.g. to ~40) — low FP risk because the body shape is tightly constrained."
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "PHN: 9 8 7 6 5 4 3 2 1 0 (fully digit-spaced)",
+      "target": "9 8 7 6 5 4 3 2 1 0",
+      "root_cause": "Hidden tail leak the harness scored as PASS: the body middle is capped at {5,11} chars, so a 10-digit fully-spaced number (19 body chars) is truncated to '9 8 7 6 5 4 3' and the trailing digits leak. Real CRA-style digit-spaced forms partially leak.",
+      "fixability": "regex-fixable: raise the body middle quantifier to cover fully-spaced 10-12 digit health numbers."
+    },
+    {
+      "category": "BANK_ACCOUNT",
+      "kind": "leak",
+      "input": "Banking coordinates on file: 12345-003-1234567890 (12-digit account).",
+      "target": "12345-003-1234567890",
+      "root_cause": "The dashed-form regex /\\d{4,5}-\\d{2,3}-\\d{5,7}/ caps the account group at 7 digits; real Canadian accounts run to 12 (the 5-3-12 form is the named axis case), so an 8-12 digit dashed coordinate leaks. The tool leaks on its own headline format.",
+      "fixability": "regex-fixable: widen the account group to {5,12} — but MUST be paired with a banking-context gate (see over-redaction below) or it amplifies the invoice/PO false positives."
+    },
+    {
+      "category": "BANK_ACCOUNT",
+      "kind": "leak",
+      "input": "Bank account for refund: 0123456 (transit 11000, institution 016).",
+      "target": "0123456",
+      "root_cause": "The account label recognizer's lookbehind requires the label within [\\s:#.-]{0,4} of the number; 'Bank account for refund: 0123456' has intervening words so the account leaks while transit/institution still fire — a partial leak that is worse than a full miss because it gives false confidence the line was handled.",
+      "fixability": "regex-fixable: widen the label->value gap (carefully) and/or add 'for refund'-style filler tolerance on the account lookbehind."
+    },
+    {
+      "category": "BANK_ACCOUNT",
+      "kind": "leak",
+      "input": "Bank: transit/inst/acct = 12345/003/1234567",
+      "target": "1234567",
+      "root_cause": "The bank-account lookbehind allows only [\\s:#.-]{0,4} between label and digits; '=' and '/' separators (common on EFT/void-cheque transcriptions) break the anchor and the account leaks. Same '=' / '/' gap appears in dense-line cases.",
+      "fixability": "regex-fixable: add '=' and '/' to the label-separator class on the bank-account lookbehind."
+    },
+    {
+      "category": "BANK_ACCOUNT",
+      "kind": "leak",
+      "input": "Acct1234567Transit12345Inst003",
+      "target": "1234567",
+      "root_cause": "The 'Acct' label anchors but the greedy digit run \\d[\\d \\-]{3,14}\\d\\b needs a trailing \\b; the next char is letter 'T' (next label glued on) so digit->letter... actually the \\b succeeds at digit/letter but the value over-runs — standalone 'Acct1234567' DOES detect; the glued trailing label is what breaks the span. Concatenated label-value-label chain.",
+      "fixability": "regex-fixable: terminate the account value on a label-word lookahead so a glued following label ('Transit') doesn't void the match."
+    },
+    {
+      "category": "BANK_ACCOUNT",
+      "kind": "over-redaction",
+      "input": "Invoice 2024-003-0000125 issued to the client on 2024-03-15.",
+      "target": "2024-003-0000125",
+      "root_cause": "The dashed-form bank regex /\\d{4,5}-\\d{2,3}-\\d{5,7}/ has NO checksum and NO label/context gate, so it equally redacts 4-3-7 invoice numbers and 5-2-7 purchase orders. This directly breaks the keep-the-financials promise, and widening the account length to fix the 5-3-12 leak makes this WORSE.",
+      "fixability": "regex-fixable: require a nearby banking-context keyword (transit/institution/void cheque/EFT/direct deposit) for the dashed form, OR suppress on a leading 'Invoice/PO/Order/Ref' label. This gate is the prerequisite that lets the account length safely widen to {5,12}."
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "over-redaction",
+      "input": "Loan amortization ledger key 9876543210123452 in the GL run.",
+      "target": "9876543210123452",
+      "root_cause": "A 16-digit GL/ledger key that is Luhn-valid by coincidence (~10% of random 16-digit IDs pass Luhn) is flagged as a card. There is no IIN/BIN prefix check; a 16-19 digit run starting with 1/2/7/8/9 is not a valid card and could be rejected without harming real-card recall. Also covers the 17-digit '1234 ...' order-reference case.",
+      "fixability": "regex-fixable: add a BIN/IIN prefix guard (real cards start 3/4/5/6) to the CREDIT_CARD validator, rejecting Luhn-coincidence long IDs that start outside that set."
+    },
+    {
+      "category": "PASSPORT",
+      "kind": "over-redaction",
+      "input": "Invoice AB123456 refers to our accounting software SKU, not a person",
+      "target": "AB123456",
+      "root_cause": "The unanchored PASSPORT shape (2 letters + 6 digits, no label) flags invoice numbers, SKUs, and part codes of that exact shape. Genuinely a precision/recall tension: tightening to a label anchor would miss unlabeled passport numbers. Flagged as the most important PASSPORT over-redaction because adding the 'i' flag (recall fix above) widens this surface.",
+      "fixability": "ambiguous (note for the loop): if the 'i' flag is added for recall, expect this FP to grow; consider a soft 'passport' label boost or a negative 'invoice/SKU/product code' context suppressor rather than a hard fix."
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "OHIP Number:\n3195 550 125 NB",
+      "target": "3195 550 125 NB",
+      "root_cause": "real-doc: label on its own line, value on next; lookbehind must cross a newline",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "SIN on file:\n746 219 038\nOHIP:\n9282 164 897",
+      "target": "9282 164 897",
+      "root_cause": "real-doc: health label on separate line",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Driver's Licence (ON): N1234-56789-80904",
+      "target": "N1234-56789-80904",
+      "root_cause": "real-doc: province qualifier (ON) between label and value",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PASSPORT",
+      "kind": "leak",
+      "input": "Passport: CA XF8823311  Expires: 2029-03-14",
+      "target": "XF8823311",
+      "root_cause": "real-doc: 7-digit passport with CA country prefix between label and value",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "leak",
+      "input": "Credit card on file: Visa 4916 0387 7292 5442  Exp 11/26",
+      "target": "4916 0387 7292 5442",
+      "root_cause": "real-doc: labeled card that fails Luhn (mistyped/sample) had no label-anchored fallback",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PERSON",
+      "kind": "leak",
+      "input": "Name: François-Xavier Beauchamp",
+      "target": "François-Xavier Beauchamp",
+      "root_cause": "real-doc: neural NER missed hyphenated French name in a form field",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ORG",
+      "kind": "leak",
+      "input": "Corp name: Westview Dental Associates Inc.",
+      "target": "Westview Dental Associates Inc",
+      "root_cause": "real-doc: neural NER missed corporate name in a form field",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ORG",
+      "kind": "leak",
+      "input": "Employer: Dalhousie University",
+      "target": "Dalhousie University",
+      "root_cause": "real-doc: neural NER missed employer org name",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PERSON",
+      "kind": "leak",
+      "input": "Contact: Dr. Priya Venkataraman, DDS (SIN: 503 842 197)",
+      "target": "Priya Venkataraman",
+      "root_cause": "real-doc: neural NER missed surname in a contact field",
+      "fixability": "regex-fixable"
+    }
+  ],
+  "extra": [
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN: 046/454/286 as keyed by the data-entry clerk.",
+      "target": "046/454/286",
+      "root_cause": "Slash separator not in the [ -] separator class; same root cause as dotted form — separator alphabet is too narrow for the label-anchored case.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN 04 6454 286 (oddly split on the scanned form).",
+      "target": "04 6454 286",
+      "root_cause": "Grouping is hard-coded to 3-3-3 (\\d{3}[ -]?\\d{3}[ -]?\\d{3}); a 2-4-3 split has the right 9 digits and a SIN label but cannot match. Label-anchored branch should accept a looser 9-digit run.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "Mixed dash/space: 12 3456 789-RP-0001 from legacy system.",
+      "target": "12 3456 789-RP-0001",
+      "root_cause": "Same dash-in-separator gap, plus dashes around the program letter where regex uses \\s* (no dash); legacy/export formats with dashes leak entirely.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "Hyphen between digits and letters only: 123456789-RT0001.",
+      "target": "123456789-RT0001",
+      "root_cause": "Dash before the program letter is not in \\s*; the 9 contiguous digits also fail Luhn so no SIN/BANK fallback covers them.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "leak",
+      "input": "Corporate card 4012.8888.8888.1881 reconciled to GL 6500.",
+      "target": "4012.8888.8888.1881",
+      "root_cause": "Dot-grouped card (4-4-4-4 with '.') leaks: the separator class is only [ -], so the per-digit quantifier (?:\\d[ -]?){13,19} cannot bridge dot-separated groups; each 4-digit run is < 13 min length. Dots are a common copy/paste and OCR rendering of card numbers.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "leak",
+      "input": "Card no: 4111.1111.1111.1111 exp 09/27",
+      "target": "4111.1111.1111.1111",
+      "root_cause": "Same dot-separator gap as above (4111.1111.1111.1111). Adding '.' to the separator class [ .-]? would catch it; risk is colliding with decimal amounts, but Luhn + 13-19 length keeps that low.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "leak",
+      "input": "Visa4539148803436467endingstatement",
+      "target": "4539148803436467",
+      "root_cause": "No-separator 16-digit run glued inside letters ('Visa4539...statement'): a letter-to-digit transition is NOT a \\b word boundary, so neither anchor matches and the whole digit run is skipped. Real risk in OCR/exported text where labels run into the number. Could relax to a lookaround on non-digit instead of \\b.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "over-redaction",
+      "input": "Invoice number 4532015112830366 dated 2025-03-15 from supplier.",
+      "target": "4532015112830366",
+      "root_cause": "A 16-digit invoice ID that happens to be Luhn-valid is flagged as a card. The recognizer has no negative context check (e.g. preceding 'invoice/PO/order/ref no.'); Luhn alone cannot distinguish a card from a coincidentally-valid 16-digit business ID.",
+      "fixability": "ambiguous"
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "over-redaction",
+      "input": "Customer account ref 4012888888881881 in the CRM (Luhn-coincidence).",
+      "target": "4012888888881881",
+      "root_cause": "16-digit CRM account ref equal to a known Visa test number (4012...1881) - genuinely indistinguishable from a real card by format+Luhn. Catching cards while keeping this is impossible without label context; this is the irreducible card/long-ID collision.",
+      "fixability": "ambiguous"
+    },
+    {
+      "category": "CREDIT_CARD",
+      "kind": "over-redaction",
+      "input": "Order reference 1234 5678 9012 3450 2 (17-digit Luhn-valid tracking).",
+      "target": "1234 5678 9012 3450 2",
+      "root_cause": "17-digit space-grouped Luhn-valid tracking/order reference flagged as a card. 17/18/19-digit IDs overlap the card length window; no card IIN starts '1234', so a BIN-prefix guard would reject it without harming real-card recall.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "BANK_ACCOUNT",
+      "kind": "over-redaction",
+      "input": "PO 12345-99-7654321 for office supplies, not banking.",
+      "target": "12345-99-7654321",
+      "root_cause": "Same unanchored dashed-form regex matches a 5-2-7 purchase-order number. No left-context check ('PO', 'Invoice', etc. should suppress) and no banking-context requirement, so non-financial dashed IDs are over-redacted.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "BANK_ACCOUNT",
+      "kind": "over-redaction",
+      "input": "Phone the branch at 416-555-0182 for transit details.",
+      "target": "416-555-0182",
+      "root_cause": "NOT a genuine bank-axis false positive: this was flagged as PHONE, which is correct redaction behavior. I mislabeled it as shouldNotDetect; the word 'transit' nearby does not cause the bank recognizer to fire on the phone number. Counts toward the harness over_redaction total but is a probe-design artifact, not a tool defect.",
+      "fixability": "ambiguous"
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "Hotline: 1-800-GOT-JUNK for disposal pickup.",
+      "target": "1-800-GOT-JUNK",
+      "root_cause": "Vanity/letter-mnemonic numbers (1-800-GOT-JUNK, 1-888-CRA-TIPS) contain alpha chars; regex only matches \\d, so letter-based dialables leak.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "Order line 1-888-CRA-TIPS to report fraud.",
+      "target": "1-888-CRA-TIPS",
+      "root_cause": "Same vanity-number class as 1-800-GOT-JUNK — alpha exchange/line segments not covered by the digit-only pattern.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "Call us +1(204)555-0199 for Winnipeg office.",
+      "target": "+1(204)555-0199",
+      "root_cause": "Same paren-with-no-trailing-separator failure as (587)555-0199, also with +1 prefix; '(204)' directly followed by exchange digits.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "EMAIL",
+      "kind": "leak",
+      "input": "Scanned contact field: maryobrien @ accountants.ca with stray spaces.",
+      "target": "maryobrien @ accountants.ca",
+      "root_cause": "Spaces around the '@' break the contiguous local@domain match; regex has no whitespace tolerance around the at-sign.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "EMAIL",
+      "kind": "leak",
+      "input": "Fax cover OCR: client at bob @ gmail.com per page 2.",
+      "target": "bob @ gmail.com",
+      "root_cause": "Spaces around '@' (local ' @ ' domain) prevent the single-token match; same whitespace-tolerance gap as the prior case.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "EMAIL",
+      "kind": "leak",
+      "input": "Degraded scan shows email: r.singh@ tax.deloitte.ca",
+      "target": "r.singh@ tax.deloitte.ca",
+      "root_cause": "Trailing space after '@' splits local part from domain; regex demands domain char immediately after '@'.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "EMAIL",
+      "kind": "leak",
+      "input": "Accented domain: contact@québec-fiscal.ca in the French letter.",
+      "target": "contact@québec-fiscal.ca",
+      "root_cause": "Accented 'é' in the domain is not in the ASCII-only domain class [A-Za-z0-9.-]; legitimate French/IDN domains with accents are missed (regex uses A-Za-z, not \\p{L}, despite the address recognizer using \\p{L}).",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "POSTAL",
+      "kind": "leak",
+      "input": "Newline-split postal where space got mangled: T2N\t1N4 in a table cell.",
+      "target": "T2N",
+      "root_cause": "Separator class is [ -] (single literal space or hyphen only); a TAB between triads is not matched, so the full code leaks. Common in PDF/table extraction.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "POSTAL",
+      "kind": "leak",
+      "input": "Double space between triads from PDF extraction: V6B  4N9 here.",
+      "target": "V6B",
+      "root_cause": "Separator is [ -]? (zero or ONE char); two spaces between triads fail, leaking the full code. Common artifact of PDF column extraction.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "POSTAL",
+      "kind": "leak",
+      "input": "Slash separator from a form template: M5S/1A1.",
+      "target": "M5S/1A1",
+      "root_cause": "A slash between triads is not in [ -]; form-template slash separators leak the full code.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Resides 5 Cedar Mews, Victoria",
+      "target": "5 Cedar Mews",
+      "root_cause": "'Mews' missing from EN type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Home 22 Glenmore Loop SW",
+      "target": "22 Glenmore Loop SW",
+      "root_cause": "'Loop' missing from EN type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Resides 200 Glen Manor, Etobicoke",
+      "target": "200 Glen Manor",
+      "root_cause": "'Manor' missing from EN type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Address 8 Maple Wynd, Aurora ON",
+      "target": "8 Maple Wynd",
+      "root_cause": "'Wynd' missing from EN type list (Scottish-origin type common in newer subdivisions).",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Cottage 99 Harbour Landing, Regina",
+      "target": "99 Harbour Landing",
+      "root_cause": "'Landing' missing from EN type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Home 6 Birchwood Gate, Vaughan",
+      "target": "6 Birchwood Gate",
+      "root_cause": "'Gate' missing from EN type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Cottage at 55 Sideroad 10",
+      "target": "55 Sideroad 10",
+      "root_cause": "'Sideroad' is in the list but only as a trailing type; with a trailing rural route number ('Sideroad 10') the type is no longer last so the match fails.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Rural Route 5, Box 12, Brandon MB",
+      "target": "Rural Route 5",
+      "root_cause": "'Rural Route' spelled-out form is not a recognized street type and has no civic-number anchor; entirely unmatched.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Adresse: 45 Montee des Pionniers, Terrebonne",
+      "target": "45 Montee des Pionniers",
+      "root_cause": "FR type list only contains accented 'Montée|Mtée'; accent-stripped 'Montee' (common from keyboards/OCR/legacy systems) is absent, so the type token never matches.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Propriete au 12 Cote du Beaver Hall, Montreal",
+      "target": "12 Cote du Beaver Hall",
+      "root_cause": "FR type list has 'Côte' but not accent-free 'Cote'; identical accent-stripping gap as Montee/Allee.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Le client habite au 4e Avenue numéro 1230, Limoilou",
+      "target": "4e Avenue",
+      "root_cause": "Ordinal-named street ('4e Avenue') where the civic number follows the type ('numéro 1230'); regex hard-requires a leading \\d{1,6} immediately before the type, so type-first/number-after Quebec ordinal formats never match.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Adresse: 1230, 4e Avenue, Limoilou",
+      "target": "4e Avenue",
+      "root_cause": "Civic number separated from street by a comma ('1230, 4e Avenue'); the regex's mandatory '\\d+[ \\t]+' separator allows only space/tab, not a comma, so the number does not connect to the ordinal street name.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Réside au 1500 Sentier des Pins",
+      "target": "1500 Sentier des Pins",
+      "root_cause": "Street type 'Sentier' (a standard Quebec generic) is not in the FR type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Bien au 22 Impasse du Ruisseau",
+      "target": "22 Impasse du Ruisseau",
+      "root_cause": "Street type 'Impasse' (common Quebec cul-de-sac generic) is not in the FR type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Domicile: 14 Voie Camillien-Houde",
+      "target": "14 Voie Camillien-Houde",
+      "root_cause": "Street type 'Voie' is not in the FR type list.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Terrain au 305 Croissant des Érables",
+      "target": "305 Croissant des Érables",
+      "root_cause": "FR-language 'Croissant' (the French rendering of Crescent, type-first order) is absent from the FR list; only English 'Crescent|Cres' exists and only in name-then-type order.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Adresse: 67 Ruelle Saint-Christophe",
+      "target": "67 Ruelle Saint-Christophe",
+      "root_cause": "Street type 'Ruelle' (alley, common in old Montreal/Quebec City civic addresses) is not in the FR type list; note 'Rue' alone will not match because the regex requires the full type token followed by a space.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ADDRESS",
+      "kind": "leak",
+      "input": "Domicile 88 Mtee des Pionniers (abbr no accent)",
+      "target": "88 Mtee des Pionniers",
+      "root_cause": "Abbreviation 'Mtee' (accent-stripped 'Mtée') absent; only accented 'Mtée' is listed. Confirmed via direct test that accented 'Mtée' DOES match, isolating this to the missing accent-free spelling.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "Alberta AHCIP 654321098 verified.",
+      "target": "654321098",
+      "root_cause": "Label alternation has AHC (matches AHCIP prefix) but the \\b word-boundary after AHC fails: AHC is immediately followed by 'IP', so \\bAHC\\b does not match inside 'AHCIP' and the lookbehind never anchors.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "Medicare card: 4901 234 567 QC",
+      "target": "4901 234 567",
+      "root_cause": "Generic English health label 'Medicare'/'Medicare card' is absent from the label alternation; without an anchor the spaced 10-digit number is left unredacted.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "Régime d'assurance maladie du Québec: BOUL 8888 9999 00",
+      "target": "BOUL 8888 9999 00",
+      "root_cause": "Same missing French label family ('régime d'assurance maladie'); the RAMQ alphanumeric body would match if anchored, but no French label anchors it.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "NB Medicare number 123 456 789",
+      "target": "123 456 789",
+      "root_cause": "New Brunswick 'Medicare number' label not recognized (same 'Medicare' gap); spaced 9-digit NB health number leaks.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Driver's Licence: A1234-56789-01234 (Ontario)",
+      "target": "A1234-56789-01234",
+      "root_cause": "DL value pattern [A-Z0-9][A-Z0-9 -]{4,14} caps at 15 chars; the canonical 17-char Ontario format A1234-NNNNN-NNNNN is truncated at the second hyphen, leaking the final 5-digit group in cleartext. Hit on every labeled ON-format case (A1234-12345-12345, S1500-30040-50060, W4400-12345-67890).",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Permit number: 12345-67890 issued provincially",
+      "target": "12345-67890",
+      "root_cause": "Label 'Permit number' is not a recognized DL anchor (the standalone word 'number' only counts when preceded by 'licence'). Provincial permits/operator IDs introduced by 'Permit' leak.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Quebec licence number L1234-560789-01 alphanumeric",
+      "target": "L1234-560789-01",
+      "root_cause": "DL value char class [A-Z0-9 -] includes space, so when 'licence' anchors (without the optional 'number' in the label), the value greedily swallows the word 'number ' backwards into itself and then \\b truncates the real ID mid-string, leaking the trailing groups. Wrong span AND partial leak.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "DL",
+      "kind": "leak",
+      "input": "Licence number ABC 123 456 spaced groups",
+      "target": "ABC 123 456",
+      "root_cause": "Same greedy-space defect: value class allows spaces so it absorbs the literal label word 'number' and then \\b cuts the value short, leaking the final space-separated group.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PASSPORT",
+      "kind": "leak",
+      "input": "Passport No. Ab 123456 per the scanned copy",
+      "target": "Ab 123456",
+      "root_cause": "Mixed-case (one lowercase letter) fails the case-sensitive [A-Z]{2} requirement. Title-cased or OCR-mixed-case passport numbers leak.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PASSPORT",
+      "kind": "over-redaction",
+      "input": "Product code AB 123456 on the parts licence agreement",
+      "target": "AB 123456",
+      "root_cause": "Same unanchored shape collision: a 2-letter + 6-digit product/part code is flagged PASSPORT even when the surrounding words ('Product code', 'parts') clearly indicate non-PII.",
+      "fixability": "ambiguous"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "Three valid SINs run together 046454286130692544046454286 EOL",
+      "target": "130692544",
+      "root_cause": "Same concatenation failure extended to 3 glued SINs (27 digits) — no boundary between any pair, so the middle SIN never gets isolated or Luhn-checked.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "Joint filers: 046 454 286130 692 544 listed",
+      "target": "130 692 544",
+      "root_cause": "Two space-grouped SINs abut with no gap ('...286130...'), so the regex consumes a misaligned 9-group run and leaves the second SIN unmatched; only the first (which also fails because the run is too long) is attempted.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN:046454286BN:123456789RP0001",
+      "target": "046454286",
+      "root_cause": "SIN digits glued to the following 'BN:' label with no boundary ('046454286BN'); the BN recognizer (higher priority) claims the overlapping BN span, and the unlabeled-SIN \\b can't fire mid-alnum, so the SIN leaks. Labeled-SIN lookbehind also fails because 'SIN:' is immediately followed by 9 digits then letters with no terminating \\b before 'BN'.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "Accounts: 123456789RC0001123456789RP0001 (corp+payroll)",
+      "target": "123456789RC0001",
+      "root_cause": "Two CRA BN+program accounts concatenated; the BN regex's trailing \\b after the 4-digit ref can't fire between '0001' and '123456789' (digit-to-digit), so the doubled run matches neither account.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "BN",
+      "kind": "leak",
+      "input": "RT0001 program for BN123456789RT0002 filing",
+      "target": "123456789RT0002",
+      "root_cause": "BN value glued to its 'BN' label ('BN123456789RT0002'); the leading \\b of the BN regex requires a boundary before the first of 9 digits, which fails between 'N' and '1'.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "Tel:4165550132 Cell:6475559988",
+      "target": "4165550132",
+      "root_cause": "10-digit phone written with NO internal separator ('4165550132'); the PHONE regex mandates a separator [ .\\-] between exchange and line group, so an unseparated run never matches.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "4165550132 6475559988 (two numbers, space only)",
+      "target": "6475559988",
+      "root_cause": "Same separatorless 10-digit phone failure; two such numbers separated only by a space, neither matches because the regex requires punctuation/space between the 3-3-4 internal groups, not just at the ends.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN 046.454.286 (dots inserted by the scanner OCR).",
+      "target": "046.454.286",
+      "root_cause": "Dot used as group separator; SIN regex separator class is only [ -], so periods break the match even though the label-anchored path tolerates a failed Luhn.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN 04 6454 286 stray-space regrouping (still digits, label present).",
+      "target": "04 6454 286",
+      "root_cause": "Pure digits, SIN-labelled, but regrouped 2-4-3 instead of 3-3-3; rigid \\d{3}[ -]?\\d{3}[ -]?\\d{3} shape rejects the regrouping. BN recognizer already tolerates arbitrary internal spacing; SIN does not.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN 046  454  286 with doubled spaces between groups.",
+      "target": "046  454  286",
+      "root_cause": "Separator is a single optional [ -]; two consecutive spaces (common OCR artifact) defeat the match. Trivially widenable to [ -]* / \\s* around the label-anchored path.",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "SIN",
+      "kind": "leak",
+      "input": "SIN046454286 merged with the label by the OCR pass.",
+      "target": "046454286",
+      "root_cause": "Label and digits merged into one token (SIN046454286); the lookbehind expects a word boundary + 0-6 separator chars between label and digits, and 'SIN046...' has no boundary, so neither the labelled nor unlabelled path fires (unlabelled also needs 3-3-3 grouping or Luhn on a clean run).",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "PHONE",
+      "kind": "leak",
+      "input": "Fax 416,555,0142 where commas stand in for dashes.",
+      "target": "416,555,0142",
+      "root_cause": "Comma used as separator; PHONE separator class is [ .\\-] and does not include comma, so the grouped number fails to match.",
+      "fixability": "regex-fixable"
+    }
+  ]
+}

@@ -68,15 +68,15 @@ interface Recognizer {
 // break the keep-the-financials promise. 'i' + \p{L} so ALL-CAPS / OCR / accented
 // addresses all match.
 const ADDRESS_RE = (() => {
-  const en = 'Street|St|Avenue|Ave|Av|Road|Rd|Boulevard|Blvd|Boul|Drive|Dr|Crescent|Cres|Court|Crt|Ct|Place|Pl|Lane|Ln|Terrace|Terr|Trail|Circle|Cir|Square|Sq|Highway|Hwy|Parkway|Pkwy|Gardens|Gdns|Heights|Hts|Concession|Sideroad|Sdrd';
-  const fr = 'Rue|Chemin|Ch|Boulevard|Boul|Avenue|Av|Montée|Mtée|Côte|Rang|Promenade|Allée|Place|Carré';
+  const en = 'Street|St|Avenue|Ave|Av|Road|Rd|Boulevard|Blvd|Boul|Drive|Dr|Crescent|Cres|Court|Crt|Ct|Place|Pl|Lane|Ln|Terrace|Terr|Trail|Circle|Cir|Square|Sq|Highway|Hwy|Parkway|Pkwy|Gardens|Gdns|Heights|Hts|Concession|Sideroad|Sdrd|Grove|Mews|Loop|Manor|Wynd|Landing|Gate|Close|Crossing|Path|Rue|Chemin';
+  const fr = 'Rue|Chemin|Ch|Boulevard|Boul|Avenue|Av|Montée|Montee|Mtée|Mtee|Côte|Cote|Rang|Promenade|Allée|Allee|Place|Carré|Carre|Sentier|Impasse|Voie|Ruelle|Croissant';
   const dir = 'NE|NW|SE|SW|Northwest|Northeast|Southwest|Southeast|North|South|East|West|Nord|Sud|Est|Ouest|N|S|E|W|O';
   const word = "[\\p{L}0-9][\\p{L}0-9.'’-]*";
   // separators are same-line only ([ \t], never \n) so a match can't span lines
   // and swallow a preceding line (e.g. a "1-800 ..." phone line above the address).
   const unit = "(?:,?[ \\t]+(?:Apt|Apartment|Suite|Ste|Unit|Bureau|PH|RR|#)\\.?[ \\t]*\\d+[A-Za-z]?)?";
   return new RegExp(
-    `\\b\\d{1,6}(?:[-–]\\d{1,5})?[ \\t]+` +
+    `\\b\\d{1,6}(?:[-–]\\d{1,5})?,?[ \\t]+` +
       `(?:(?:${fr})\\.?[ \\t]+(?:${word}[ \\t]*){1,4}|(?:${word}[ \\t]+){1,4}(?:${en})\\b\\.?)` +
       `(?:[ \\t]+(?:${dir})\\b)?${unit}`,
     'giu',
@@ -92,7 +92,7 @@ const RECOGNIZERS: Recognizer[] = [
   // anchor keeps false positives away.
   {
     category: 'BN',
-    re: /\b(?:\d[ ]?){8}\d\s*R[CTPZ]\s*(?:\d[ ]?){3}\d\b/gi,
+    re: /\b(?:\d[ \t-]{0,2}){8}\d[ \t-]*R[A-Z][ \t-]*(?:\d[ \t-]{0,2}){3,4}\d\b/gi,
     score: 1,
   },
   // Trust account number: T + 8 digits
@@ -100,12 +100,26 @@ const RECOGNIZERS: Recognizer[] = [
   // Credit / debit card: 13–19 digits (grouped), Luhn-valid
   {
     category: 'CREDIT_CARD',
-    re: /\b(?:\d[ -]?){13,19}\b/g,
+    // Negative lookbehind skips digit runs introduced by an ID label (invoice / ref /
+    // ledger / GL / PO / account ref) — those are 16-digit business IDs that pass Luhn
+    // by coincidence (~10% of random 16-digit numbers) and must not be over-redacted.
+    re: /(?<!\b(?:[Ii]nvoice|INV|[Ii]nv|[Rr]ef(?:erence)?|[Ll]edger|GL|CRM|PO|[Oo]rder|[Aa]ccount\s*ref)\s*(?:no\.?|number|#)?\s{0,3})\b(?:\d[ .\-]?){13,19}\b/g,
     valid: (m) => {
       const d = m.replace(/\D/g, '');
-      return d.length >= 13 && d.length <= 19 && luhnValid(d);
+      // BIN guard: real cards start 3-6 (Amex/Visa/MC/Discover). Rejects Luhn-
+      // coincident 16-digit GL/ledger/invoice IDs that would otherwise over-redact.
+      return d.length >= 13 && d.length <= 19 && /^[3-6]/.test(d) && luhnValid(d);
     },
     score: 1,
+  },
+  // Credit card — label-anchored: a 13-19 digit group introduced by a card label
+  // (or a network name) is redacted even if it FAILS Luhn. Same trust logic as the
+  // labeled-SIN branch — a mistyped or sample card on a working paper is still a
+  // card, and leaking it over one transposed digit is the failure that kills trust.
+  {
+    category: 'CREDIT_CARD',
+    re: /(?<=\b(?:credit\s*card|card\s*(?:no\.?|number|#)?|visa|mastercard|amex|american\s*express)\b[^\d\n]{0,16})(?:\d[ .\-]?){13,19}(?!\d)/gi,
+    score: 0.9,
   },
   // Provincial health number — label-anchored (its 7–12 digit shape collides with
   // SIN/phone, so we only claim it when introduced by a health label). Lookbehind
@@ -114,36 +128,58 @@ const RECOGNIZERS: Recognizer[] = [
   // alphanumeric form (4 letters + 8 digits, e.g. "FORO 9012 3456 78").
   {
     category: 'HEALTH',
-    re: /(?<=\b(?:health\s*(?:card|number|no\.?|#)?|PHN|OHIP|MSP|RAMQ|AHC)\b[^\n\d]{0,28})(?:[A-Z]{4}[\s-]?\d[\d \-]{4,10}\d|\d[\d \-]{5,11}\d)(?:[ -]?[A-Z]{1,2})?\b/gi,
+    // The gap between label and value uses [^\d] (not [^\n\d]) so it crosses a line
+    // break — on real forms the label sits on its own line above the value
+    // ("OHIP Number:\n3195 550 125 NB"). Bounded to 40 non-digit chars so it can't
+    // reach an unrelated number further down. Health numbers have no checksum, so
+    // this label-proximity is the ONLY thing protecting them.
+    re: /(?<=\b(?:health\s*(?:card|number|no\.?|#|insurance)?|PHN|PHIN|OHIP|MSP|RAMQ|AHCIP|AHC|medicare|(?:r[ée]gime\s*d['']?\s*)?assurance\s*maladie|carte\s*soleil)\b[^\d]{0,40})(?:[A-Z]{4}[\s-]?\d[\d \t.\-]{4,16}\d|\d[\d \t.\-]{4,20}\d)(?:[ -]?[A-Z]{1,2})?\b/gi,
     score: 0.95,
   },
-  // Driver's licence — label-anchored (per-province formats vary too much to shape-match safely)
+  // Driver's licence — label-anchored (per-province formats vary too much to shape-match
+  // safely). Tolerates a province qualifier between label and value ("Licence (ON): …")
+  // and a line break (the gap class allows newlines).
   {
     category: 'DL',
-    re: /(?<=\b(?:driver'?s?\s*licen[cs]e|licen[cs]e\s*(?:no\.?|#|number)?|DL)\b[\s:#-]{0,4})[A-Z0-9][A-Z0-9 -]{4,14}\b/gi,
+    re: /(?<=\b(?:(?:driver'?s?\s*)?licen[cs]e|permis(?:\s*de\s*conduire)?|permit|DL)(?:\s*(?:no|number|#)\.?)?(?:\s*\([A-Za-z .]{2,10}\))?[\s:#-]{0,4})(?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{4,19}\b/gi,
     score: 0.85,
   },
-  // Canadian passport: 2 letters + 6 digits (distinctive shape)
-  { category: 'PASSPORT', re: /\b[A-Z]{2}\s?\d{6}\b/g, score: 0.8 },
+  // Canadian passport: 2 letters + 6 digits. Label-anchored form (with 'i') catches
+  // lowercase and dashed variants; the bare uppercase shape stays case-sensitive and
+  // is guarded against invoice/SKU/order references that share the exact shape.
+  {
+    category: 'PASSPORT',
+    re: /(?<=\bpassport\s*(?:no\.?|number|#)?[^\d\n]{0,10})[A-Z]{2}[\s-]?\d{6,7}\b/gi,
+    score: 0.85,
+  },
+  {
+    category: 'PASSPORT',
+    re: /(?<!\b(?:[Ii]nvoice|INV|[Ii]nv|SKU|[Rr]ef|[Oo]rder|PO|[Ii]tem|[Mm]odel|[Pp]art|[Cc]ode|[Pp]roduct)\.?\s{0,3})\b[A-Z]{2}\s?\d{6}\b/g,
+    score: 0.8,
+  },
   // Canadian SIN — label-anchored: a 9-digit group introduced by a SIN label is
   // redacted even if it FAILS Luhn. A mistyped or sample SIN is still a SIN, and
   // leaking a real one over a single transposed digit is the failure that kills
   // trust. (Unlabeled 9-digit runs still need the checksum, just below.)
   {
     category: 'SIN',
-    re: /(?<=\b(?:SIN|NAS|social\s*insurance(?:\s*(?:number|no\.?|#))?|num[ée]ro\s*d['']assurance\s*sociale|assurance\s*sociale)\b[\s:#.\/-]{0,6})\d{3}[ -]?\d{3}[ -]?\d{3}\b/gi,
+    re: /(?<=\b(?:SIN|NAS|social\s*insurance(?:\s*(?:number|no\.?|#))?|num[ée]ro\s*d['']assurance\s*sociale|assurance\s*sociale)[\s:#.\/-]{0,6})\d(?:[ \t.\/-]{0,2}\d){8}(?![0-9])/gi,
     score: 0.95,
   },
   // Canadian SIN — unlabeled: 9 digits in 3-3-3 grouping, Luhn-valid (the checksum
   // is what keeps random 9-digit IDs from being claimed when there's no label).
+  // Separator allows space/dash/dot since the Luhn check gates false positives.
   {
     category: 'SIN',
-    re: /\b\d{3}[ -]?\d{3}[ -]?\d{3}\b/g,
+    re: /\b\d{3}[ .\-]?\d{3}[ .\-]?\d{3}\b/g,
     valid: (m) => luhnValid(m),
     score: 1,
   },
-  // Bank account — dashed transit-institution-account form
-  { category: 'BANK_ACCOUNT', re: /\b\d{4,5}-\d{2,3}-\d{5,7}\b/g, score: 0.85 },
+  // Bank account — dashed/slashed transit-institution-account form. Transit is
+  // EXACTLY 5 digits and institution EXACTLY 3 (the real Canadian shape); this
+  // excludes 4-3-7 invoice/PO numbers that the looser 4-5/2-3 form over-redacted,
+  // while the 4-12 account group catches the full 5-3-12 void-cheque format.
+  { category: 'BANK_ACCOUNT', re: /\b\d{5}[-\/]\d{3}[-\/]\d{4,12}\b/g, score: 0.85 },
   // Bank account — label-anchored Canadian coordinates (transit 5 / institution 3
   // / account 7–12), as they appear on void cheques and EFT/direct-deposit setup.
   // Each piece is claimed where its own label introduces it.
@@ -152,15 +188,42 @@ const RECOGNIZERS: Recognizer[] = [
   { category: 'BANK_ACCOUNT', re: /(?<=\b(?:account|acct|a\/c|compte)\s*(?:no\.?|number|num|#)?[\s:#.-]{0,4})\d[\d \-]{3,14}\d\b/gi, score: 0.8 },
   // Street address (civic number + street name + type) — see ADDRESS_RE above
   { category: 'ADDRESS', re: ADDRESS_RE, score: 0.8 },
-  // Canadian postal code: A1A 1A1
-  { category: 'POSTAL', re: /\b[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d\b/g, score: 0.95 },
-  // Email
-  { category: 'EMAIL', re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, score: 1 },
-  // Phone (NANP): optional +1, area, exchange, line
+  // Rural route designator (RR 3, R.R. 5, Rural Route 2) — common rural Canadian
+  // mailing address with no civic-number+street-type shape of its own.
+  { category: 'ADDRESS', re: /\b(?:R\.?R\.?|Rural\s+Route)\s*#?\s*\d{1,3}\b/gi, score: 0.75 },
+  // Canadian postal code: A1A 1A1 (tolerate up to 2 space/dash/slash separators for
+  // PDF double-spacing and form-template slashes)
+  { category: 'POSTAL', re: /\b[A-Za-z]\d[A-Za-z][ \t\/-]{0,2}\d[A-Za-z]\d\b/g, score: 0.95 },
+  // Email. Tolerates spaces around '@' (a routine OCR/typo artifact) and accented
+  // IDN domains (québec-fiscal.ca) via \p{L} + the u flag — same letter class the
+  // address layer already uses. Still anchored by the literal dot + TLD.
+  { category: 'EMAIL', re: /[A-Za-z0-9._%+-]+\s?@\s?[\p{L}0-9.-]+\.[\p{L}]{2,}/gu, score: 1 },
+  // Phone (NANP): optional +1, area, exchange, line. Separators are optional (catches
+  // unseparated export form 6045550199) but the area code and exchange must start
+  // [2-9] per NANP — this is what keeps random 10-digit IDs from being claimed as
+  // phones. Trailing (?!\d) lets a glued suffix ("...0132ext204") still match.
   {
     category: 'PHONE',
-    re: /(?:\+?1[ .\-]?)?\(?\d{3}\)?[ .\-]\d{3}[ .\-]\d{4}\b/g,
+    re: /(?<![\d.])(?:\+?1[ .\-]?)?\(?[2-9]\d{2}\)?[ .,\/-]?[2-9]\d{2}[ .,\/-]?\d{4}(?!\d)/g,
     score: 0.9,
+  },
+  // Form-field ORG capture — the neural layer misses some company names, so when an
+  // explicit org-field label introduces a value we claim it deterministically. Runs
+  // before the PERSON field (so "Corp name:" is an ORG, not a person). Value excludes
+  // digits/commas so it stops before a trailing " BN 12 3456…" or the next field.
+  {
+    category: 'ORG',
+    re: /(?<=\b(?:corp(?:oration)?(?:\s+name)?|company(?:\s+name)?|employer|business\s+name)\s*:[ \t]*)[A-Za-z][\p{L}\p{M}&'’.\- ]*[\p{L}.]/giu,
+    score: 0.7,
+  },
+  // Form-field PERSON capture — covers names the neural NER misses (hyphenated
+  // French names, some surnames) when they sit in an explicit same-line name field.
+  // Value stays on the label's line (no newline crossing — that mis-fired on
+  // column-jumbled PDFs, grabbing the next field). Handles "LAST, First" order.
+  {
+    category: 'PERSON',
+    re: /(?<=\b(?:employee\s+name|account\s+holder|client(?:\s+name)?|contact|spouse|taxpayer|name|prepared\s+by)\s*:[ \t]*)[A-Za-zÀ-ÖØ-Þ][\p{L}\p{M}'’.\- ]*(?:,[ \t]*[A-Za-zÀ-ÖØ-Þ][\p{L}\p{M}'’.\- ]*)?[\p{L}.]/giu,
+    score: 0.7,
   },
 ];
 
