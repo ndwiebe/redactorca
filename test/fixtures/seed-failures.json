@@ -384,6 +384,22 @@
       "target": "123,456.00",
       "root_cause": "worded SIN gap must not swallow a nearby dollar amount",
       "fixability": "regex-fixable"
+    },
+    {
+      "category": "ORG",
+      "kind": "leak",
+      "input": "Corporation name: 1847293 Alberta Ltd. (o/a Greenway Landscape)",
+      "target": "1847293 Alberta Ltd",
+      "root_cause": "real-doc: numbered company name starts with a digit; ORG form-field value required a letter start",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "ORG",
+      "kind": "over-redaction",
+      "input": "Company: 2024 figures were strong this year",
+      "target": "2024 figures were strong",
+      "root_cause": "guard: a digit-led non-name sentence after a company label should not be claimed when it has the leading-letter shape... (kept as tracked precision probe)",
+      "fixability": "regex-fixable"
     }
   ],
   "extra": [

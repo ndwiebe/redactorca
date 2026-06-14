@@ -225,7 +225,16 @@ const RECOGNIZERS: Recognizer[] = [
   // digits/commas so it stops before a trailing " BN 12 3456…" or the next field.
   {
     category: 'ORG',
-    re: /(?<=\b(?:corp(?:oration)?(?:\s+name)?|company(?:\s+name)?|employer|business\s+name)\s*:[ \t]*)[A-Za-z][\p{L}\p{M}&'’.\- ]*[\p{L}.]/giu,
+    re: /(?<=\b(?:corp(?:oration)?(?:'?s)?(?:\s+name)?|company(?:'?s)?(?:\s+name)?|employer|business(?:'?s)?\s+name)\s*:[ \t]*)[A-Za-z][\p{L}\p{M}&'’.\- ]*[\p{L}.]/giu,
+    score: 0.7,
+  },
+  // Numbered company ("Corporation name: 1847293 Alberta Ltd."). Separate from the
+  // recognizer above because it needs a CASE-SENSITIVE uppercase word after the digit
+  // run — that's what distinguishes a numbered corporation from prose after the label
+  // ("Company: 2024 figures were strong"). No 'i' flag, so [A-Z] stays uppercase-only.
+  {
+    category: 'ORG',
+    re: /(?<=\b(?:[Cc]orp(?:oration)?(?:'?s)?(?:\s+name)?|[Cc]ompany(?:'?s)?(?:\s+name)?|[Bb]usiness(?:'?s)?\s+name)\s*:[ \t]*)\d+[ ]+[A-Z][\p{L}\p{M}0-9&'’.\- ]*[\p{L}.]/gu,
     score: 0.7,
   },
   // Form-field PERSON capture — covers names the neural NER misses (hyphenated
