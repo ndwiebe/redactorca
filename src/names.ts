@@ -119,11 +119,41 @@ function nameToRegex(name: string): RegExp {
   return new RegExp(`(?<![\\p{L}\\p{N}])${parts.join('\\s+')}(?![\\p{L}\\p{N}])`, 'gui');
 }
 
+/**
+ * Split prepared text into overlapping word-windows so a long document isn't
+ * silently truncated at the model's ~512-token limit (BERT). Without this, every
+ * name past roughly the first page leaks. ~280 words ≈ 360 tokens (safely under
+ * 512); a 40-word overlap means a name straddling a window boundary still appears
+ * whole in at least one window. We only need the detected name STRINGS — character
+ * offsets come from locating them back in the full original text below.
+ */
+function chunkForNer(text: string, win = 220, overlap = 40): string[] {
+  const toks = text.split(/\s+/).filter(Boolean);
+  if (toks.length <= win) return [text];
+  const chunks: string[] = [];
+  for (let i = 0; i < toks.length; i += win - overlap) {
+    chunks.push(toks.slice(i, i + win).join(' '));
+    if (i + win >= toks.length) break;
+  }
+  return chunks;
+}
+
 /** Detect PERSON and ORG spans in `text`. Returns char-offset spans against the ORIGINAL text. */
 export async function detectNames(text: string, onProgress?: NamesProgress): Promise<Span[]> {
   const pipe = (await getPipe(onProgress)) as (t: string) => Promise<RawTok[]>;
-  const out = await pipe(decase(reflow(text)));
-  const entities = entityStrings(out);
+  // Run the model over overlapping windows so long documents are fully covered,
+  // then dedupe the detected names by text+category.
+  const chunks = chunkForNer(decase(reflow(text)));
+  const collected: EntityString[] = [];
+  for (let c = 0; c < chunks.length; c++) {
+    onProgress?.(Math.round((100 * c) / chunks.length), `scanning ${c + 1}/${chunks.length}`);
+    collected.push(...entityStrings(await pipe(chunks[c])));
+  }
+  const seen = new Set<string>();
+  const entities = collected.filter((e) => {
+    const k = `${e.category}:${e.text}`;
+    return seen.has(k) ? false : (seen.add(k), true);
+  });
   const spans: Span[] = [];
   const claimed: boolean[] = new Array(text.length).fill(false);
   for (const { text: name, category } of entities) {
