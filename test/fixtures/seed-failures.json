@@ -400,6 +400,30 @@
       "target": "2024 figures were strong",
       "root_cause": "guard: a digit-led non-name sentence after a company label should not be claimed when it has the leading-letter shape... (kept as tracked precision probe)",
       "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "NL MCP 3318 472 901 on the claim",
+      "target": "3318 472 901",
+      "root_cause": "real-doc: Newfoundland MCP health label not recognized",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "SK HSN 1029 384 756 for the dependant",
+      "target": "1029 384 756",
+      "root_cause": "real-doc: Saskatchewan HSN health label not recognized",
+      "fixability": "regex-fixable"
+    },
+    {
+      "category": "HEALTH",
+      "kind": "leak",
+      "input": "NS Health 9284 561 037 confirmed",
+      "target": "9284 561 037",
+      "root_cause": "real-doc: Nova Scotia health services number label missing",
+      "fixability": "regex-fixable"
     }
   ],
   "extra": [

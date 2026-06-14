@@ -133,7 +133,7 @@ const RECOGNIZERS: Recognizer[] = [
     // ("OHIP Number:\n3195 550 125 NB"). Bounded to 40 non-digit chars so it can't
     // reach an unrelated number further down. Health numbers have no checksum, so
     // this label-proximity is the ONLY thing protecting them.
-    re: /(?<=\b(?:health\s*(?:card|number|no\.?|#|insurance)?|PHN|PHIN|OHIP|MSP|RAMQ|AHCIP|AHC|medicare|(?:r[ée]gime\s*d['']?\s*)?assurance\s*maladie|carte\s*soleil)\b[^\d]{0,40})(?:[A-Z]{4}[\s-]?\d[\d \t.\-]{4,16}\d|\d[\d \t.\-]{4,20}\d)(?:[ -]?[A-Z]{1,2})?\b/gi,
+    re: /(?<=\b(?:health\s*(?:card|number|no\.?|#|insurance|services?\s*(?:number|no\.?|#)?)?|PHN|PHIN|OHIP|MSP|RAMQ|AHCIP|AHC|MCP|HSN|MSI|medicare|medical\s*care\s*plan|(?:r[ée]gime\s*d['']?\s*)?assurance\s*maladie|carte\s*soleil)\b[^\d]{0,40})(?:[A-Z]{4}[\s-]?\d[\d \t.\-]{4,16}\d|\d[\d \t.\-]{4,20}\d)(?:[ -]?[A-Z]{1,2})?\b/gi,
     score: 0.95,
   },
   // Driver's licence — label-anchored (per-province formats vary too much to shape-match
