@@ -262,6 +262,7 @@ async function loadFile(f: File) {
   const isPdf = f.type === 'application/pdf' || lower.endsWith('.pdf');
   const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?|gif)$/.test(lower);
   const isDocx = lower.endsWith('.docx');
+  const isXlsx = /\.(xlsx|xlsm|xlsb|xls)$/.test(lower);
 
   // Old binary Word format — mammoth can't read it, and the generic text
   // fallback would silently analyze mojibake (a fake "success" is a leak risk).
@@ -284,6 +285,48 @@ async function loadFile(f: File) {
         : `${f.name}: no text found in that document.`;
     } catch (err) {
       status.textContent = `Couldn't read that Word file. Try pasting the text instead. (${(err as Error).message})`;
+    }
+    return;
+  }
+
+  // Spreadsheet → read every sheet in-browser (SheetJS). CPAs live in Excel, so
+  // this is a first-class format. Each sheet becomes CSV-style text so every cell
+  // is scanned; long sheets are covered by the NER windowing in detectNames.
+  if (isXlsx) {
+    status.textContent = `Reading ${f.name} in your browser…`;
+    try {
+      const XLSX = await import('xlsx'); // lazy — only loads when a spreadsheet is opened
+      const buf = await f.arrayBuffer(); // read locally, never uploaded
+      const wb = XLSX.read(buf, { type: 'array' });
+      const parts: string[] = [];
+      for (const sheetName of wb.SheetNames) {
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName], { defval: '' });
+        if (!rows.length) {
+          // No header row to key on — fall back to the raw grid so nothing is missed.
+          const csv = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName], { blankrows: false });
+          if (csv.trim()) parts.push(`# Sheet: ${sheetName}\n${csv}`);
+          continue;
+        }
+        // Emit each cell as "Header: value" so the COLUMN HEADER acts as a PII label.
+        // This lets the label-anchored detectors catch checksum-less PII sitting in a
+        // column (health #, account #, licence, even a mistyped SIN) that a bare CSV
+        // grid — where the header is rows away from the value — would leak.
+        const lines = rows.map((r) =>
+          Object.entries(r)
+            .filter(([, v]) => v !== '' && v != null)
+            .map(([k, v]) => `${k}: ${String(v)}`)
+            .join(', '),
+        );
+        parts.push(`# Sheet: ${sheetName}\n${lines.join('\n')}`);
+      }
+      const text = parts.join('\n\n');
+      input.value = text;
+      analyze(text);
+      status.textContent = text.trim()
+        ? `${f.name}: ${wb.SheetNames.length} sheet${wb.SheetNames.length === 1 ? '' : 's'} read locally. Nothing was uploaded.`
+        : `${f.name}: no cell data found in that workbook.`;
+    } catch (err) {
+      status.textContent = `Couldn't read that spreadsheet. Try exporting it to CSV. (${(err as Error).message})`;
     }
     return;
   }
