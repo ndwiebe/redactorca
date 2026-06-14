@@ -1,0 +1,23 @@
+# ⚠️ DO NOT DEPLOY THIS CSP UNTIL THE SELF-HOSTED ASSETS ARE ACTIVE (SELF-HOST.md).
+# It is intentionally NOT wired up yet: the shipped build still loads the NER model
+# from the Hugging Face CDN (names.ts `allowRemoteModels = true`), which this
+# `connect-src 'self'` policy would BLOCK — breaking name detection in production.
+# Activate only after: model in R2 + served same-origin, names.ts/ocr.ts pointed at
+# local paths (allowRemoteModels=false). This file is committed as prep, inert until
+# the site is actually deployed via the SELF-HOST.md sequence.
+#
+# Cloudflare Pages response headers. The CSP is the ENFORCEMENT of the product's
+# core promise: default-src 'self' + connect-src 'self' means the browser will
+# refuse any outbound request to a third party — your client documents physically
+# cannot leave this origin. The detection model, ONNX-runtime WASM, and tesseract
+# assets are all served from this origin (see SELF-HOST.md), so nothing here needs
+# an external host. 'wasm-unsafe-eval' is required to compile the WASM detection
+# engines; worker-src blob: is for the tesseract/pdf.js web workers.
+#
+# NOTE: applied on the deployed site only, not in `vite dev` (Vite's HMR client
+# needs looser script rules). Verify no-egress in dev by watching the network panel.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin

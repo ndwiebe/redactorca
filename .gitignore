@@ -2,3 +2,9 @@ node_modules
 dist
 *.local
 .DS_Store
+
+# Self-hosted detection assets — large binaries, fetched locally via `npm run fetch-model`
+# and served from R2 in production (see SELF-HOST.md). Not committed (178MB model, WASM).
+public/models/
+public/ort/
+public/tesseract/
